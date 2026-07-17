@@ -1,27 +1,54 @@
-// Local storage shim matching the async window.storage API the app expects.
-// In the Claude artifact environment window.storage is provided by the host;
-// here we back it with localStorage so your configs persist in the browser.
-const PREFIX = "ffwr:";
+// Supabase-backed storage — scoped per authenticated user.
+// Keeps the same async API the app expects (get/set/delete/list).
+import { supabase } from "./supabase.js";
+
+let _userId = null;
+
+export function setStorageUser(userId) {
+  _userId = userId;
+}
 
 export const storage = {
   async get(key) {
-    const raw = localStorage.getItem(PREFIX + key);
-    return raw === null ? null : { key, value: raw };
+    if (!_userId) return null;
+    const { data, error } = await supabase
+      .from("user_data")
+      .select("value")
+      .eq("user_id", _userId)
+      .eq("key", key)
+      .maybeSingle();
+    if (error || !data) return null;
+    return { key, value: data.value };
   },
+
   async set(key, value) {
-    localStorage.setItem(PREFIX + key, value);
+    if (!_userId) return { key, value };
+    const { error } = await supabase.from("user_data").upsert(
+      { user_id: _userId, key, value },
+      { onConflict: "user_id,key" }
+    );
+    if (error) console.error("storage.set error:", error);
     return { key, value };
   },
+
   async delete(key) {
-    localStorage.removeItem(PREFIX + key);
+    if (!_userId) return { key, deleted: true };
+    await supabase
+      .from("user_data")
+      .delete()
+      .eq("user_id", _userId)
+      .eq("key", key);
     return { key, deleted: true };
   },
+
   async list(prefix = "") {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(PREFIX + prefix)) keys.push(k.slice(PREFIX.length));
-    }
-    return { keys, prefix };
+    if (!_userId) return { keys: [], prefix };
+    const { data, error } = await supabase
+      .from("user_data")
+      .select("key")
+      .eq("user_id", _userId)
+      .like("key", `${prefix}%`);
+    if (error || !data) return { keys: [], prefix };
+    return { keys: data.map((r) => r.key), prefix };
   },
 };

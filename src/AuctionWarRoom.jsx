@@ -183,11 +183,10 @@ const makeInitial = makeBlank;
 const emptyStore = () => ({
   active: 0,
   configs: [
-    { name: "Draft Day", data: makeBlank() },       // clean slate, active on startup
-    { name: "Prep + Targets", data: makeSeeded() },  // your spreadsheet plan, saved
-    null, null, null,
+    { name: "My Team", data: makeBlank() },
+    null, null, null, null,
   ],
-  board: {}, // league-wide market: { [playerName]: { pos, val, sold, gone } }
+  board: {},
 });
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -248,7 +247,7 @@ function PlayerInput({ value, onChange, onPick, placeholder, className, ariaLabe
   );
 }
 
-export default function AuctionWarRoom() {
+export default function AuctionWarRoom({ onLogout, userEmail }) {
   const [store, setStore] = useState(emptyStore);
   const [loaded, setLoaded] = useState(false);
   const [addingFor, setAddingFor] = useState(null);
@@ -473,6 +472,12 @@ export default function AuctionWarRoom() {
   return (
     <div className="wr-root">
       <style>{css}</style>
+
+      {/* ---------- user bar ---------- */}
+      <div className="user-bar">
+        <span className="user-email">{userEmail}</span>
+        <button className="ghost user-logout" onClick={onLogout}>Log out</button>
+      </div>
 
       {/* ---------- config bookmarks ---------- */}
       <nav className="cfg-bar" aria-label="Saved configurations">
@@ -872,7 +877,7 @@ export default function AuctionWarRoom() {
         <button className="ghost" onClick={clearTargets}>Clear targets</button>
         <button className="ghost accent" onClick={loadPrep}>Load prep + targets</button>
         <button className="ghost danger" onClick={resetAll}>Reset config to blank</button>
-        <span className="autosave">Starts blank · save a lineup by branching a config above · autosaves on this device</span>
+        <span className="autosave">Starts blank · save a lineup by branching a config above · autosaves to your account</span>
       </footer>
     </div>
   );
@@ -908,6 +913,19 @@ const css = `
   box-sizing: border-box;
 }
 .wr-root *, .wr-root *::before, .wr-root *::after { box-sizing: border-box; }
+
+/* ---------- user bar ---------- */
+.user-bar {
+  display: flex; align-items: center; gap: 12px; justify-content: flex-end;
+  margin-bottom: 14px;
+}
+.user-email {
+  font-family: 'Space Mono', monospace; font-size: 11px;
+  color: var(--dim); letter-spacing: 0.04em;
+}
+.user-logout {
+  font-size: 11px !important; padding: 5px 12px !important;
+}
 
 /* ---------- config bookmarks ---------- */
 .cfg-bar {

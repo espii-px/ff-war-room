@@ -44,9 +44,18 @@ self-contained (no component library, styles are in a template string at the bot
 
 ## Persistence
 
-The app calls an async `window.storage` API (`get/set/delete/list`). In this project
-that's shimmed to `localStorage` in `src/storage.js` and wired up in `src/main.jsx`.
-Saves are keyed `ff2026-war-room-v5`, with migrations from older `v1/v2/v3` keys.
+The app calls an async `window.storage` API (`get/set/delete/list`). The storage
+layer (`src/storage.js`) writes to a Supabase `user_data` table, scoped per
+authenticated user. Each user's data is isolated via Row Level Security.
+Saves are keyed `ff2026-war-room-v6`.
+
+## Auth
+
+Supabase email/password auth. `src/Auth.jsx` handles login/signup. `src/main.jsx`
+manages session state and passes the user ID into storage via `setStorageUser()`.
+Config: set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env`
+(see `.env.example`). Run `supabase-setup.sql` in the Supabase SQL Editor to
+create the `user_data` table and RLS policies.
 
 ## Conventions
 
