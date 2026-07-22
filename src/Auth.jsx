@@ -4,7 +4,7 @@ import { supabase } from "./supabase.js";
 export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [mode, setMode] = useState("login"); // "login" | "signup" | "reset"
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -15,7 +15,13 @@ export default function Auth() {
     setMessage(null);
     setLoading(true);
     try {
-      if (mode === "signup") {
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+        setMessage("Check your email for a password reset link.");
+      } else if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         setMessage("Check your email for a confirmation link, then log in.");
@@ -38,7 +44,7 @@ export default function Auth() {
       <style>{authCss}</style>
       <div className="auth-card">
         <h1 className="auth-title">
-          Draft <span className="auth-grad">War Room</span>
+          Draft <span className="auth-grad">Lab</span>
         </h1>
         <p className="auth-sub">FF 2026 · The League · Auction</p>
 
@@ -51,22 +57,33 @@ export default function Auth() {
             required
             autoComplete="email"
           />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
-          />
+          {mode !== "reset" && (
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            />
+          )}
           <button type="submit" className="auth-btn" disabled={loading}>
-            {loading ? "..." : mode === "login" ? "Log in" : "Sign up"}
+            {loading ? "..." : mode === "reset" ? "Send reset link" : mode === "login" ? "Log in" : "Sign up"}
           </button>
         </form>
 
         {error && <p className="auth-error">{error}</p>}
         {message && <p className="auth-msg">{message}</p>}
+
+        {mode === "login" && (
+          <button
+            className="auth-forgot"
+            onClick={() => { setMode("reset"); setError(null); setMessage(null); }}
+          >
+            Forgot password?
+          </button>
+        )}
 
         <button
           className="auth-toggle"
@@ -173,9 +190,15 @@ const authCss = `
 .auth-msg {
   color: var(--cyan); font-size: 13px; margin: 14px 0 0;
 }
+.auth-forgot {
+  background: none; border: none; color: var(--dim);
+  font-size: 12px; margin-top: 14px; cursor: pointer;
+  font-family: inherit;
+}
+.auth-forgot:hover { color: var(--violet); }
 .auth-toggle {
   background: none; border: none; color: var(--dim);
-  font-size: 13px; margin-top: 20px; cursor: pointer;
+  font-size: 13px; margin-top: 12px; cursor: pointer;
   font-family: inherit;
 }
 .auth-toggle:hover { color: var(--cyan); }

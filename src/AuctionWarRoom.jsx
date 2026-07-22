@@ -6,6 +6,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 /*  · Keeper checkboxes (max 2) with standout styling                  */
 /*  · ~170-player DB with autocomplete, values estimated for           */
 /*    HALF PPR + 6pt passing TDs, 12-team, $200. All editable.         */
+/*  · Player Board shows all players by default, sorted by value       */
+/*  · "My Guys" stars on the board feed default targets in War Room    */
 /* ------------------------------------------------------------------ */
 
 const STORE_KEY = "ff2026-war-room-v6";
@@ -125,6 +127,61 @@ const findPlayer = (name) => {
   return PLAYERS.find((p) => p.n.toLowerCase() === s) || null;
 };
 
+/* ---------------- 2025 league draft history ---------------- */
+/* Actual prices paid in this league last year — used to calculate league-adjusted values */
+const HIST = {
+  "Bijan Robinson": 73, "Ja'Marr Chase": 73, "CeeDee Lamb": 67, "Justin Jefferson": 66,
+  "Saquon Barkley": 65, "Christian McCaffrey": 59, "Derrick Henry": 59, "Jahmyr Gibbs": 52,
+  "Amon-Ra St. Brown": 52, "Drake London": 51, "Jonathan Taylor": 50, "Ashton Jeanty": 50,
+  "Chase Brown": 50, "Bucky Irving": 44, "Omarion Hampton": 41, "Nico Collins": 40,
+  "Josh Allen": 38, "Kenneth Walker III": 37, "Trey McBride": 37, "Josh Jacobs": 36,
+  "Jayden Daniels": 35, "A.J. Brown": 34, "Jalen Hurts": 30, "Tyreek Hill": 30,
+  "Tee Higgins": 29, "TreVeyon Henderson": 29, "Mike Evans": 29, "Lamar Jackson": 28,
+  "Malik Nabers": 28, "James Conner": 26, "James Cook": 26, "Emeka Egbuka": 25,
+  "Alvin Kamara": 25, "Joe Burrow": 24, "Breece Hall": 24, "Puka Nacua": 23,
+  "Tetairoa McMillan": 22, "Marvin Harrison Jr.": 22, "Davante Adams": 20, "Terry McLaurin": 20,
+  "Matthew Golden": 19, "DK Metcalf": 19, "David Montgomery": 18, "RJ Harvey": 18,
+  "George Kittle": 18, "D'Andre Swift": 17, "Aaron Jones": 16, "Garrett Wilson": 16,
+  "Tony Pollard": 16, "George Pickens": 16, "Isiah Pacheco": 16, "Ricky Pearsall": 15,
+  "Calvin Ridley": 15, "Jameson Williams": 14, "Jordan Mason": 13, "Xavier Worthy": 13,
+  "Zach Charbonnet": 13, "Jaylen Waddle": 12, "DJ Moore": 12, "Kaleb Johnson": 12,
+  "Courtland Sutton": 12, "Rashee Rice": 11, "Jaylen Warren": 11, "Brock Bowers": 11,
+  "Brian Thomas Jr.": 11, "Dak Prescott": 11, "Rome Odunze": 10, "Deebo Samuel": 10,
+  "Jordan Addison": 10, "Zay Flowers": 10, "Kyren Williams": 10, "Tank Bigsby": 10,
+};
+
+/* Calculate league multiplier per position from last year's prices vs Yahoo values */
+const POS_MULT = (() => {
+  const byPos = {};
+  for (const p of PLAYERS) {
+    const hist = HIST[p.n];
+    if (hist && p.v > 0) {
+      if (!byPos[p.p]) byPos[p.p] = { paid: 0, val: 0 };
+      byPos[p.p].paid += hist;
+      byPos[p.p].val += p.v;
+    }
+  }
+  const mults = {};
+  for (const [pos, d] of Object.entries(byPos)) {
+    mults[pos] = d.val > 0 ? d.paid / d.val : 1;
+  }
+  return mults;
+})();
+
+/* League-adjusted value: blends Yahoo value with this league's historical spending patterns */
+const leagueVal = (name, pos, yahooVal) => {
+  if (!yahooVal || yahooVal <= 0) return null;
+  // If player was drafted last year, weight their historical price
+  const hist = HIST[name];
+  const mult = POS_MULT[pos] || 1;
+  if (hist) {
+    // 40% last year's price, 60% Yahoo adjusted by position multiplier
+    return Math.max(1, Math.round(hist * 0.4 + yahooVal * mult * 0.6));
+  }
+  // New player: just apply position multiplier
+  return Math.max(1, Math.round(yahooVal * mult));
+};
+
 /* shorthand names from Ryan's sheet, valued for this league */
 const MKT = {
   "Herbert": 10, "Caleb Williams": 15, "Dart": 12, "Shough": 3,
@@ -153,27 +210,27 @@ const seedSlots = [
   { pos: "RB2",    proj: 6,  player: "Javonte Williams", spent: 6,    targets: ["Javonte Williams"] },
   { pos: "FLX",    proj: 5,  player: "Judkins",          spent: 5,    targets: ["Judkins", "Swift", "Stevenson"] },
   { pos: "TE",     proj: 20, player: "",                 spent: null, targets: ["Bowers", "Loveland", "Warren", "Pitts"] },
-  { pos: "K/QB",   proj: 1,  player: "",                 spent: null, targets: [] },
+  { pos: "K",      proj: 1,  player: "",                 spent: null, targets: [] },
   { pos: "DEF",    proj: 1,  player: "",                 spent: null, targets: [] },
   { pos: "BN-QB2", proj: 2,  player: "",                 spent: null, targets: ["Dart", "Shough"] },
   { pos: "BN-RB3", proj: 1,  player: "",                 spent: null, targets: ["CROD", "Tuten", "Monangai", "JCM", "Charbs", "Chubba"] },
   { pos: "BN-RB4", proj: 1,  player: "",                 spent: null, targets: ["Jonathon Brooks", "Black"] },
   { pos: "BN-WR3", proj: 15, player: "",                 spent: null, targets: ["Burden", "Waddle", "Olave", "Evans", "DJ Moore"] },
-  { pos: "BN-QB3", proj: 6,  player: "",                 spent: null, targets: ["Quentin Johnston"] },
+  { pos: "BN-FLX2", proj: 6,  player: "",                 spent: null, targets: ["Quentin Johnston"] },
   { pos: "BN-WR4", proj: 6,  player: "",                 spent: null, targets: ["C. Watson"] },
   { pos: "IR",     proj: 0,  player: "",                 spent: null, targets: [] },
 ];
 
 const makeSlots = (seeded) =>
   seedSlots.map((s, i) => ({
-    id: i + 1, pos: s.pos, proj: s.proj,
+    id: i + 1, pos: s.pos, proj: seeded ? s.proj : 0,
     player: seeded ? s.player : "",
     spent: seeded ? s.spent : null,
     keeper: false,
     targets: seeded ? s.targets.map(T) : [],
   }));
 
-// Blank draft-day slate: keeps the budget plan + slot template, no won players or targets.
+// Blank draft-day slate: empty plan, no players or targets.
 const makeBlank = () => ({ budget: 200, slots: makeSlots(false) });
 // Seeded from Ryan's spreadsheet: pre-filled picks + full target lists.
 const makeSeeded = () => ({ budget: 200, slots: makeSlots(true) });
@@ -187,6 +244,7 @@ const emptyStore = () => ({
     null, null, null, null,
   ],
   board: {},
+  myGuys: [],
 });
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -254,10 +312,11 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
   const [newTarget, setNewTarget] = useState("");
   const [editingVal, setEditingVal] = useState(null);
   const [renaming, setRenaming] = useState(false);
-  const [view, setView] = useState("room");
   const [boardQ, setBoardQ] = useState("");
   const [boardAdd, setBoardAdd] = useState("");
   const [boardPos, setBoardPos] = useState("ALL");
+  const [dragPlayer, setDragPlayer] = useState(null);
+  const [dropSlotId, setDropSlotId] = useState(null);
   const saveTimer = useRef(null);
   const prevMaxBid = useRef(null);
   const [bidPulse, setBidPulse] = useState(false);
@@ -305,6 +364,26 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
   }, [board]);
 
   const adjVal = (v) => Math.max(1, Math.round(v * market.inflation));
+
+  const myGuys = store.myGuys || [];
+  const toggleMyGuy = (playerName) =>
+    setStore((st) => {
+      const guys = st.myGuys || [];
+      return { ...st, myGuys: guys.includes(playerName) ? guys.filter((n) => n !== playerName) : [...guys, playerName] };
+    });
+
+  /* merged view: all PLAYERS + any custom board entries, with board overrides applied */
+  const fullBoard = useMemo(() => {
+    const merged = {};
+    for (const p of PLAYERS) {
+      merged[p.n] = { pos: p.p, val: p.v, sold: null, gone: false, ...(board[p.n] || {}) };
+    }
+    // include any manually-added board entries not in PLAYERS
+    for (const [name, e] of Object.entries(board)) {
+      if (!merged[name]) merged[name] = { pos: e.pos || "?", val: e.val, sold: e.sold, gone: e.gone };
+    }
+    return merged;
+  }, [board]);
 
   /* ---------- load / save ---------- */
   useEffect(() => {
@@ -466,6 +545,33 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
     setData(() => makeSeeded());
   };
 
+  const loadMyGuys = () => {
+    const guys = store.myGuys || [];
+    if (guys.length === 0) { window.alert("No players starred yet. Go to the Player Board and star your guys first."); return; }
+    if (!window.confirm(`Load ${guys.length} starred players as targets into every matching slot in THIS config? Existing targets will be replaced.`)) return;
+    setData((d) => ({
+      ...d,
+      slots: d.slots.map((s) => {
+        // match slot position prefix (QB, RB, WR, TE, K, DEF) to player position
+        const slotPos = s.pos.replace(/[0-9]/g, "").replace("BN-", "").replace("FLX", "FLEX");
+        const matching = guys
+          .map((name) => {
+            const db = findPlayer(name);
+            return db ? { name: db.n, pos: db.p, val: db.v } : null;
+          })
+          .filter(Boolean)
+          .filter((p) => {
+            if (slotPos === "FLEX") return ["RB", "WR", "TE"].includes(p.pos);
+            if (slotPos === "K") return p.pos === "K";
+            return p.pos === slotPos;
+          })
+          .sort((a, b) => b.val - a.val);
+        if (matching.length === 0) return s;
+        return { ...s, targets: matching.map((p) => ({ name: p.name, val: p.val, gone: false })) };
+      }),
+    }));
+  };
+
   const planDelta = nums.planTotal - state.budget;
   const activeCfg = store.configs[store.active];
 
@@ -477,6 +583,12 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
       <div className="user-bar">
         <span className="user-email">{userEmail}</span>
         <button className="ghost user-logout" onClick={onLogout}>Log out</button>
+      </div>
+
+      {/* ---------- title ---------- */}
+      <div className="board-title">
+        <span className="eyebrow">FF 2026 · The League · Auction · ½ PPR · 6pt Pass TD</span>
+        <h1>Draft <span className="grad">Lab</span>{activeCfg && <span className="cfg-title"> / {activeCfg.name}</span>}</h1>
       </div>
 
       {/* ---------- config bookmarks ---------- */}
@@ -519,362 +631,326 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
         <span className="cfg-hint">new = copy of current · click active name to rename</span>
       </nav>
 
-      {/* ---------- view tabs ---------- */}
-      <div className="view-tabs" role="tablist">
-        <button role="tab" aria-selected={view === "room"} className={`view-tab ${view === "room" ? "on" : ""}`} onClick={() => setView("room")}>
-          War Room
-        </button>
-        <button role="tab" aria-selected={view === "board"} className={`view-tab ${view === "board" ? "on" : ""}`} onClick={() => setView("board")}>
-          Player Board
-          {market.tracked > 0 && <span className="tab-count">{market.tracked}</span>}
-        </button>
-        {Math.abs(market.inflation - 1) >= 0.02 && (
-          <span className={`inflation-pill ${market.inflation > 1 ? "hot" : "cool"}`}>
-            {market.inflation > 1 ? "▲" : "▼"} market {market.inflation > 1 ? "+" : ""}{Math.round((market.inflation - 1) * 100)}%
-          </span>
-        )}
-      </div>
+      {/* ---------- two-column layout ---------- */}
+      <div className="split-layout">
 
-      {view === "room" && (<>
-      {/* ---------- scoreboard ---------- */}
-      <header className="board">
-        <div className="board-title">
-          <span className="eyebrow">FF 2026 · The League · Auction · ½ PPR · 6pt Pass TD</span>
-          <h1>Draft <span className="grad">War Room</span>{activeCfg && <span className="cfg-title"> / {activeCfg.name}</span>}</h1>
-        </div>
+        {/* ---------- LEFT: scoreboard + roster ---------- */}
+        <div className="left-col">
+          <header className="board">
+            <div className="board-stats">
+              <div className={`maxbid ${bidPulse ? "pulse" : ""} ${nums.maxBid <= 5 ? "danger" : ""}`}>
+                <span className="stat-label">Max bid</span>
+                <span className="maxbid-num">${nums.maxBid}</span>
+                <span className="stat-sub">keeps $1 for every other open slot</span>
+              </div>
 
-        <div className="board-stats">
-          <div className={`maxbid ${bidPulse ? "pulse" : ""} ${nums.maxBid <= 5 ? "danger" : ""}`}>
-            <span className="stat-label">Max bid</span>
-            <span className="maxbid-num">${nums.maxBid}</span>
-            <span className="stat-sub">keeps $1 for every other open slot</span>
+              <div className="stat">
+                <span className="stat-label">Remaining</span>
+                <span className="stat-num c-pink">${nums.remaining}</span>
+                <span className="stat-sub">of ${state.budget}{nums.keeperCount > 0 ? ` · $${nums.keeperCost} on keepers` : ""}</span>
+              </div>
+
+              <div className="stat">
+                <span className="stat-label">Spent</span>
+                <span className="stat-num">${nums.spent}</span>
+                <span className="stat-sub">{nums.filledCount}/{nums.totalCount} slots filled</span>
+              </div>
+
+              <div className="stat">
+                <span className="stat-label">Vs plan</span>
+                <span className={`stat-num ${nums.bank > 0 ? "good" : nums.bank < 0 ? "bad" : ""}`}>
+                  {nums.bank > 0 ? "+" : ""}${nums.bank}
+                </span>
+                <span className="stat-sub">{nums.bank >= 0 ? "banked on picks so far" : "over plan on picks so far"}</span>
+              </div>
+
+              <div className="stat">
+                <span className="stat-label">Keepers</span>
+                <span className={`stat-num c-violet`}>{nums.keeperCount}/{MAX_KEEPERS}</span>
+                <span className="stat-sub">{nums.keeperCount > 0 ? `$${nums.keeperCost} committed` : "tick 2 boxes below"}</span>
+              </div>
+            </div>
+
+            {planDelta !== 0 && (
+              <div className="plan-warning">
+                Plan totals ${nums.planTotal} against a ${state.budget} budget ({planDelta > 0 ? "+" : ""}{planDelta}). Adjust plan values below until it zeroes out.
+              </div>
+            )}
+
+            {Math.abs(market.inflation - 1) >= 0.02 && (
+              <div className={`inflation-bar ${market.inflation > 1 ? "hot" : "cool"}`}>
+                {market.inflation > 1 ? "▲" : "▼"} Market inflation {market.inflation > 1 ? "+" : ""}{Math.round((market.inflation - 1) * 100)}% — room paid ${market.paid} for ${market.worth} of value
+              </div>
+            )}
+          </header>
+
+          <main className="roster">
+          <div className="roster-head">
+            <span className="kpr-col">KPR</span>
+            <span>Slot</span>
+            <span className="num-col">Budget</span>
+            <span className="num-col">Paid</span>
+            <span>Squad</span>
+            <span>Targets</span>
           </div>
 
-          <div className="stat">
-            <span className="stat-label">Remaining</span>
-            <span className="stat-num c-pink">${nums.remaining}</span>
-            <span className="stat-sub">of ${state.budget}{nums.keeperCount > 0 ? ` · $${nums.keeperCost} on keepers` : ""}</span>
-          </div>
+          {state.slots.map((slot) => {
+            const filled = isFilled(slot);
+            const keeperFull = !slot.keeper && nums.keeperCount >= MAX_KEEPERS;
+            const isDropTarget = dropSlotId === slot.id;
+            return (
+              <div
+                key={slot.id}
+                className={`row ${filled ? "filled" : ""} ${slot.keeper ? "keeper" : ""} ${isDropTarget ? "drop-target" : ""}`}
+                onDragOver={(e) => { e.preventDefault(); setDropSlotId(slot.id); }}
+                onDragLeave={() => setDropSlotId(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDropSlotId(null);
+                  try {
+                    const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+                    if (data.name) {
+                      const existing = slot.targets.find((t) => t.name === data.name);
+                      if (!existing) addTargetByName(slot, data.name, data.val);
+                    }
+                  } catch (_) {}
+                }}
+              >
+                <span className="kpr-col">
+                  {slot.pos !== "IR" && (
+                    <button
+                      className={`k-toggle ${slot.keeper ? "on" : ""}`}
+                      role="checkbox"
+                      aria-checked={slot.keeper}
+                      aria-label={`Keeper at ${slot.pos}`}
+                      onClick={() => toggleKeeper(slot)}
+                      disabled={keeperFull}
+                      title={slot.keeper ? "Unmark keeper" : keeperFull ? `Max ${MAX_KEEPERS} keepers — untick one first` : "Mark this slot as a keeper (custom cost goes in Paid)"}
+                    >
+                      K
+                    </button>
+                  )}
+                </span>
 
-          <div className="stat">
-            <span className="stat-label">Spent</span>
-            <span className="stat-num">${nums.spent}</span>
-            <span className="stat-sub">{nums.filledCount}/{nums.totalCount} slots filled</span>
-          </div>
+                <span className="pos">{slot.pos}</span>
 
-          <div className="stat">
-            <span className="stat-label">Vs plan</span>
-            <span className={`stat-num ${nums.bank > 0 ? "good" : nums.bank < 0 ? "bad" : ""}`}>
-              {nums.bank > 0 ? "+" : ""}${nums.bank}
-            </span>
-            <span className="stat-sub">{nums.bank >= 0 ? "banked on picks so far" : "over plan on picks so far"}</span>
-          </div>
+                <span className="num-col">
+                  <input
+                    className="cash proj"
+                    type="number" min="0"
+                    value={slot.proj === null ? "" : slot.proj}
+                    onChange={(e) => updateSlot(slot.id, { proj: e.target.value === "" ? 0 : Number(e.target.value) })}
+                    aria-label={`Budget for ${slot.pos}`}
+                  />
+                </span>
 
-          <div className="stat">
-            <span className="stat-label">Keepers</span>
-            <span className={`stat-num c-violet`}>{nums.keeperCount}/{MAX_KEEPERS}</span>
-            <span className="stat-sub">{nums.keeperCount > 0 ? `$${nums.keeperCost} committed` : "tick 2 boxes below"}</span>
-          </div>
-        </div>
+                <span className="num-col">
+                  <input
+                    className={`cash paid ${slot.spent !== null && slot.spent !== "" && slot.proj > 0 ? (Number(slot.spent) <= slot.proj ? "at-plan" : "over-plan") : ""}`}
+                    type="number" min="0"
+                    placeholder={slot.keeper ? "cost" : "$"}
+                    value={slot.spent === null || slot.spent === "" ? "" : slot.spent}
+                    onChange={(e) => updateSlot(slot.id, { spent: e.target.value === "" ? null : Number(e.target.value) })}
+                    aria-label={slot.keeper ? `Keeper cost at ${slot.pos}` : `Price paid at ${slot.pos}`}
+                  />
+                </span>
 
-        {planDelta !== 0 && (
-          <div className="plan-warning">
-            Plan totals ${nums.planTotal} against a ${state.budget} budget ({planDelta > 0 ? "+" : ""}{planDelta}). Adjust plan values below until it zeroes out.
-          </div>
-        )}
-      </header>
+                <span className="won-cell">
+                  <PlayerInput
+                    className="player"
+                    placeholder={slot.keeper ? "Keeper name" : "—"}
+                    value={slot.player}
+                    ariaLabel={`Player at ${slot.pos}`}
+                    onChange={(v) => updateSlot(slot.id, { player: v })}
+                    onPick={(p) => updateSlot(slot.id, { player: p.n })}
+                  />
+                  {slot.keeper && <span className="k-badge">KEEPER</span>}
+                </span>
 
-      {/* ---------- roster board ---------- */}
-      <main className="roster">
-        <div className="roster-head">
-          <span className="kpr-col">KPR</span>
-          <span>Slot</span>
-          <span className="num-col">Plan</span>
-          <span>Won</span>
-          <span className="num-col">Paid</span>
-          <span>Targets · tap name to assign · tap $ to edit · ✕ = gone</span>
-        </div>
-
-        {state.slots.map((slot) => {
-          const filled = isFilled(slot);
-          const keeperFull = !slot.keeper && nums.keeperCount >= MAX_KEEPERS;
-          return (
-            <div key={slot.id} className={`row ${filled ? "filled" : ""} ${slot.keeper ? "keeper" : ""}`}>
-              <span className="kpr-col">
-                {slot.pos !== "IR" && (
-                  <button
-                    className={`k-toggle ${slot.keeper ? "on" : ""}`}
-                    role="checkbox"
-                    aria-checked={slot.keeper}
-                    aria-label={`Keeper at ${slot.pos}`}
-                    onClick={() => toggleKeeper(slot)}
-                    disabled={keeperFull}
-                    title={slot.keeper ? "Unmark keeper" : keeperFull ? `Max ${MAX_KEEPERS} keepers — untick one first` : "Mark this slot as a keeper (custom cost goes in Paid)"}
-                  >
-                    K
-                  </button>
-                )}
-              </span>
-
-              <span className="pos">{slot.pos}</span>
-
-              <span className="num-col">
-                <input
-                  className="cash proj"
-                  type="number" min="0"
-                  value={slot.proj === null ? "" : slot.proj}
-                  onChange={(e) => updateSlot(slot.id, { proj: e.target.value === "" ? 0 : Number(e.target.value) })}
-                  aria-label={`Planned dollars for ${slot.pos}`}
-                />
-              </span>
-
-              <span className="won-cell">
-                <PlayerInput
-                  className="player"
-                  placeholder={slot.keeper ? "Keeper name" : "—"}
-                  value={slot.player}
-                  ariaLabel={`Player won at ${slot.pos}`}
-                  onChange={(v) => updateSlot(slot.id, { player: v })}
-                  onPick={(p) => updateSlot(slot.id, { player: p.n })}
-                />
-                {slot.keeper && <span className="k-badge">KEEPER</span>}
-              </span>
-
-              <span className="num-col">
-                <input
-                  className="cash paid"
-                  type="number" min="0"
-                  placeholder={slot.keeper ? "cost" : "$"}
-                  value={slot.spent === null || slot.spent === "" ? "" : slot.spent}
-                  onChange={(e) => updateSlot(slot.id, { spent: e.target.value === "" ? null : Number(e.target.value) })}
-                  aria-label={slot.keeper ? `Keeper cost at ${slot.pos}` : `Price paid at ${slot.pos}`}
-                />
-              </span>
-
-              <span className="chips">
-                {slot.targets.map((t, i) => {
-                  const editing = editingVal && editingVal.slotId === slot.id && editingVal.idx === i;
-                  return (
-                    <span key={i} className={`chip ${t.gone ? "gone" : ""} ${slot.player === t.name ? "won" : ""}`}>
-                      <button
-                        className="chip-name"
-                        onClick={() => (t.gone ? patchTarget(slot, i, { gone: false }) : assignTarget(slot, t.name))}
-                        onDoubleClick={() => removeTarget(slot, i)}
-                        title={t.gone ? "Marked gone — click to restore. Double-click to delete." : "Click to assign. Double-click to delete."}
-                      >
-                        {t.name}
-                      </button>
-                      {editing ? (
-                        <input
-                          className="chip-val-input"
-                          type="number" min="0" autoFocus
-                          defaultValue={t.val ?? ""}
-                          onBlur={(e) => { patchTarget(slot, i, { val: e.target.value === "" ? null : Number(e.target.value) }); setEditingVal(null); }}
-                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
-                          aria-label={`Market value for ${t.name}`}
-                        />
-                      ) : (
+                <span className="chips">
+                  {slot.targets.map((t, i) => {
+                    const editing = editingVal && editingVal.slotId === slot.id && editingVal.idx === i;
+                    return (
+                      <span key={i} className={`chip ${t.gone ? "gone" : ""} ${slot.player === t.name ? "won" : ""}`}>
                         <button
-                          className="chip-val"
-                          onClick={() => setEditingVal({ slotId: slot.id, idx: i })}
-                          title="Market value estimate — click to edit"
+                          className="chip-name"
+                          onClick={() => (t.gone ? patchTarget(slot, i, { gone: false }) : assignTarget(slot, t.name))}
+                          onDoubleClick={() => removeTarget(slot, i)}
+                          title={t.gone ? "Marked gone — click to restore. Double-click to delete." : "Click to assign. Double-click to delete."}
                         >
-                          {t.val === null || t.val === undefined ? "$?" : `$${t.val}`}
+                          {t.name}
                         </button>
-                      )}
-                      <button
-                        className="chip-x"
-                        onClick={() => patchTarget(slot, i, { gone: !t.gone })}
-                        title={t.gone ? "Restore" : "Drafted by someone else"}
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  );
-                })}
-
-                {addingFor === slot.id ? (
-                  <>
-                    <PlayerInput
-                      className="chip-add-input"
-                      placeholder="Type a player…"
-                      value={newTarget}
-                      ariaLabel={`Add target for ${slot.pos}`}
-                      onChange={(v) => setNewTarget(v)}
-                      onPick={(p) => addTargetByName(slot, p.n, p.v)}
-                    />
-                    <button className="chip-add confirm" onClick={() => addTargetByName(slot, newTarget)}>add</button>
-                  </>
-                ) : (
-                  <button className="chip-add" onClick={() => { setAddingFor(slot.id); setNewTarget(""); }}>
-                    + target
-                  </button>
-                )}
-              </span>
-            </div>
-          );
-        })}
-
-        <div className="row totals">
-          <span className="kpr-col" />
-          <span className="pos">Total</span>
-          <span className="num-col cash-static">${nums.planTotal}</span>
-          <span />
-          <span className="num-col cash-static">${nums.spent}</span>
-          <span className="totals-note">
-            Budget ${" "}
-            <input
-              className="cash budget"
-              type="number" min="1"
-              value={state.budget}
-              onChange={(e) => setData((d) => ({ ...d, budget: Number(e.target.value) || 0 }))}
-              aria-label="League auction budget"
-            />
-          </span>
-        </div>
-      </main>
-      </>)}
-
-      {view === "board" && (
-        <section className="pboard">
-          <div className="pb-stats">
-            <div className="stat">
-              <span className="stat-label">Inflation</span>
-              <span className={`stat-num ${market.inflation > 1.02 ? "bad" : market.inflation < 0.98 ? "good" : ""}`}>
-                {market.worth > 0 ? `${market.inflation > 1 ? "+" : ""}${Math.round((market.inflation - 1) * 100)}%` : "—"}
-              </span>
-              <span className="stat-sub">{market.worth > 0 ? `room paid $${market.paid} for $${market.worth} of value` : "log sold prices to track"}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Off the board</span>
-              <span className="stat-num c-pink">{market.offBoard}</span>
-              <span className="stat-sub">{market.tracked} player{market.tracked === 1 ? "" : "s"} on the board</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Your remaining</span>
-              <span className="stat-num">${nums.remaining}</span>
-              <span className="stat-sub">max bid ${nums.maxBid}</span>
-            </div>
-          </div>
-
-          <div className="pb-addbar">
-            <PlayerInput
-              className="pb-add-input"
-              placeholder="Add a player to the board…"
-              value={boardAdd}
-              ariaLabel="Add player to board"
-              onChange={(v) => setBoardAdd(v)}
-              onPick={(p) => { addBoardPlayer(p); setBoardAdd(""); }}
-            />
-            <button className="pb-add-btn" onClick={() => { addBoardPlayer(boardAdd); setBoardAdd(""); }}>
-              add
-            </button>
-          </div>
-
-          {market.tracked === 0 ? (
-            <div className="pb-empty">
-              <p className="pb-empty-title">Board's empty.</p>
-              <p>As the auction runs, add each player who gets nominated. Log what they sold for or just tick them gone. The board tracks live inflation and reprices everyone you've entered.</p>
-            </div>
-          ) : (
-            <>
-              <div className="pb-controls">
-                <input
-                  className="pb-search"
-                  type="text"
-                  placeholder="Filter the board…"
-                  value={boardQ}
-                  onChange={(e) => setBoardQ(e.target.value)}
-                  aria-label="Filter player board"
-                />
-                {["ALL", "QB", "RB", "WR", "TE", "K", "DEF"].map((p) => (
-                  <button key={p} className={`pb-filter ${boardPos === p ? "on" : ""}`} onClick={() => setBoardPos(p)}>
-                    {p}
-                  </button>
-                ))}
-              </div>
-
-              <div className="pb-head">
-                <span>Player</span>
-                <span className="pb-c">Pos</span>
-                <span className="pb-c num-col">Value</span>
-                <span className="pb-c num-col">Adj</span>
-                <span className="pb-c num-col">Sold $</span>
-                <span className="pb-c">Gone</span>
-                <span className="pb-c" />
-              </div>
-
-              {Object.entries(board)
-                .filter(([, e]) => boardPos === "ALL" || e.pos === boardPos)
-                .filter(([name]) => !boardQ.trim() || name.toLowerCase().includes(boardQ.trim().toLowerCase()))
-                .sort((a, b) => (Number(b[1].val) || 0) - (Number(a[1].val) || 0))
-                .map(([name, e]) => {
-                  const gone = e.gone || Number(e.sold) > 0;
-                  const sold = Number(e.sold) || 0;
-                  const val = Number(e.val) || 0;
-                  const diff = sold > 0 && val > 0 ? sold - val : 0;
-                  const posClass = (e.pos || "?").replace("/", "");
-                  return (
-                    <div key={name} className={`pb-row ${gone ? "gone" : ""}`}>
-                      <span className="pb-name">{name}</span>
-                      <span className="pb-c">
-                        {e.pos && e.pos !== "?" ? (
-                          <span className={`ac-pos pos-${posClass}`}>{e.pos}</span>
+                        {editing ? (
+                          <input
+                            className="chip-val-input"
+                            type="number" min="0" autoFocus
+                            defaultValue={t.val ?? ""}
+                            onBlur={(e) => { patchTarget(slot, i, { val: e.target.value === "" ? null : Number(e.target.value) }); setEditingVal(null); }}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
+                            aria-label={`Market value for ${t.name}`}
+                          />
                         ) : (
-                          <span className="ac-pos pos-unknown">?</span>
+                          <button
+                            className="chip-val"
+                            onClick={() => setEditingVal({ slotId: slot.id, idx: i })}
+                            title="Market value estimate — click to edit"
+                          >
+                            {t.val === null || t.val === undefined ? "$?" : `$${t.val}`}
+                          </button>
                         )}
-                      </span>
-                      <span className="pb-c num-col pb-val">{val > 0 ? `$${val}` : "—"}</span>
-                      <span className="pb-c num-col pb-adj" title="Value adjusted for current inflation">
-                        {val > 0 ? `$${adjVal(val)}` : "—"}
-                      </span>
-                      <span className="pb-c num-col">
-                        <input
-                          className={`cash pb-sold ${diff > 0 ? "over" : diff < 0 ? "under" : ""}`}
-                          type="number" min="0" placeholder="—"
-                          value={e.sold === null || e.sold === undefined || e.sold === "" ? "" : e.sold}
-                          onChange={(ev) => setBoardEntry(name, { sold: ev.target.value === "" ? null : Number(ev.target.value) })}
-                          aria-label={`Sold price for ${name}`}
-                          title={sold > 0 && val > 0 ? `${diff > 0 ? "+" : ""}$${diff} vs value` : "What the room paid"}
-                        />
-                      </span>
-                      <span className="pb-c">
                         <button
-                          className={`k-toggle pb-gone ${gone ? "on" : ""}`}
-                          role="checkbox"
-                          aria-checked={gone}
-                          aria-label={`${name} off the board`}
-                          onClick={() => setBoardEntry(name, e.gone || sold > 0 ? { gone: false, sold: null } : { gone: true })}
-                          title={gone ? "Put back on the board" : "Mark drafted"}
-                        >
-                          {gone ? "✓" : ""}
-                        </button>
-                      </span>
-                      <span className="pb-c">
-                        <button
-                          className="pb-remove"
-                          onClick={() => removeBoardEntry(name)}
-                          aria-label={`Remove ${name} from board`}
-                          title="Remove from board"
+                          className="chip-x"
+                          onClick={() => patchTarget(slot, i, { gone: !t.gone })}
+                          title={t.gone ? "Restore" : "Drafted by someone else"}
                         >
                           ✕
                         </button>
                       </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
-              <p className="pb-note">
-                Inflation compares total dollars paid to the total value of players sold, and the Adj column reprices everyone still on the board. If the room overpays early, the leftovers get cheaper than sticker, and that's where your banked cash eats.
-              </p>
-            </>
-          )}
-        </section>
-      )}
+                  {addingFor === slot.id ? (
+                    <>
+                      <PlayerInput
+                        className="chip-add-input"
+                        placeholder="Type a player…"
+                        value={newTarget}
+                        ariaLabel={`Add target for ${slot.pos}`}
+                        onChange={(v) => setNewTarget(v)}
+                        onPick={(p) => addTargetByName(slot, p.n, p.v)}
+                      />
+                      <button className="chip-add confirm" onClick={() => addTargetByName(slot, newTarget)}>add</button>
+                    </>
+                  ) : (
+                    <button className="chip-add" onClick={() => { setAddingFor(slot.id); setNewTarget(""); }}>
+                      + target
+                    </button>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+
+          <div className="row totals">
+            <span className="kpr-col" />
+            <span className="pos">Total</span>
+            <span className="num-col cash-static">${nums.planTotal}</span>
+            <span className="num-col cash-static">${nums.spent}</span>
+            <span />
+            <span className="totals-note">
+              Budget ${" "}
+              <input
+                className="cash budget"
+                type="number" min="1"
+                value={state.budget}
+                onChange={(e) => setData((d) => ({ ...d, budget: Number(e.target.value) || 0 }))}
+                aria-label="League auction budget"
+              />
+            </span>
+          </div>
+        </main>
+        </div>
+
+        {/* ---------- RIGHT: player board ---------- */}
+        <aside className="pboard">
+          <div className="pb-title-bar">
+            <h2 className="pb-title">Player Board</h2>
+            {myGuys.length > 0 && <span className="pb-my-count">{myGuys.length}★</span>}
+          </div>
+
+          <div className="pb-controls">
+            <input
+              className="pb-search"
+              type="text"
+              placeholder="Filter…"
+              value={boardQ}
+              onChange={(e) => setBoardQ(e.target.value)}
+              aria-label="Filter player board"
+            />
+            {["ALL", "QB", "RB", "WR", "TE"].map((p) => (
+              <button key={p} className={`pb-filter ${boardPos === p ? "on" : ""}`} onClick={() => setBoardPos(p)}>
+                {p}
+              </button>
+            ))}
+            <button className={`pb-filter ${boardPos === "MY" ? "on" : ""}`} onClick={() => setBoardPos("MY")}>
+              MY GUYS
+            </button>
+          </div>
+
+          <div className="pb-head">
+            <span className="pb-c pb-star-col" title="My Guys">★</span>
+            <span>Player</span>
+            <span className="pb-c">Pos</span>
+            <span className="pb-c num-col">Yahoo</span>
+            <span className="pb-c num-col">Lgue</span>
+            <span className="pb-c">Gone</span>
+          </div>
+
+          <div className="pb-scroll">
+            {Object.entries(fullBoard)
+              .filter(([name, e]) => {
+                if (boardPos === "MY") return myGuys.includes(name);
+                return boardPos === "ALL" || e.pos === boardPos;
+              })
+              .filter(([name]) => !boardQ.trim() || name.toLowerCase().includes(boardQ.trim().toLowerCase()))
+              .sort((a, b) => (Number(b[1].val) || 0) - (Number(a[1].val) || 0))
+              .map(([name, e]) => {
+                const gone = e.gone || Number(e.sold) > 0;
+                const val = Number(e.val) || 0;
+                const lv = leagueVal(name, e.pos, val);
+                const posClass = (e.pos || "?").replace("/", "");
+                const isMyGuy = myGuys.includes(name);
+                return (
+                  <div
+                    key={name}
+                    className={`pb-row ${gone ? "gone" : ""} ${isMyGuy ? "my-guy" : ""}`}
+                    draggable={!gone}
+                    onDragStart={(ev) => {
+                      setDragPlayer(name);
+                      ev.dataTransfer.setData("text/plain", JSON.stringify({ name, pos: e.pos, val: lv || val }));
+                      ev.dataTransfer.effectAllowed = "copy";
+                    }}
+                    onDragEnd={() => setDragPlayer(null)}
+                  >
+                    <span className="pb-c pb-star-col">
+                      <button
+                        className={`pb-star ${isMyGuy ? "on" : ""}`}
+                        onClick={() => toggleMyGuy(name)}
+                        aria-label={isMyGuy ? `Remove ${name} from My Guys` : `Add ${name} to My Guys`}
+                        title={isMyGuy ? "Remove from My Guys" : "Add to My Guys"}
+                      >
+                        {isMyGuy ? "★" : "☆"}
+                      </button>
+                    </span>
+                    <span className="pb-name">{name}</span>
+                    <span className="pb-c">
+                      <span className={`ac-pos pos-${posClass}`}>{e.pos}</span>
+                    </span>
+                    <span className="pb-c num-col pb-yahoo">{val > 0 ? `$${val}` : "—"}</span>
+                    <span className="pb-c num-col pb-league" title={HIST[name] ? `Went for $${HIST[name]} last year` : "Est. from league trends"}>{lv ? `$${lv}` : "—"}</span>
+                    <span className="pb-c">
+                      <button
+                        className={`k-toggle pb-gone ${gone ? "on" : ""}`}
+                        role="checkbox"
+                        aria-checked={gone}
+                        aria-label={`${name} off the board`}
+                        onClick={() => setBoardEntry(name, e.gone || Number(e.sold) > 0 ? { gone: false, sold: null } : { gone: true, pos: e.pos, val: e.val })}
+                        title={gone ? "Put back on the board" : "Mark drafted"}
+                      >
+                        {gone ? "✓" : ""}
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+        </aside>
+      </div>
 
       <footer className="wr-footer">
         <button className="ghost" onClick={clearWon}>Clear won players</button>
         <button className="ghost" onClick={clearTargets}>Clear targets</button>
+        <button className="ghost accent" onClick={loadMyGuys}>Load My Guys as targets</button>
         <button className="ghost accent" onClick={loadPrep}>Load prep + targets</button>
         <button className="ghost danger" onClick={resetAll}>Reset config to blank</button>
         <span className="autosave">Starts blank · save a lineup by branching a config above · autosaves to your account</span>
@@ -983,130 +1059,133 @@ const css = `
 }
 .cfg-hint { font-size: 11px; color: var(--dim); margin-left: auto; }
 
-/* ---------- view tabs ---------- */
-.view-tabs {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 22px;
+/* ---------- inflation bar ---------- */
+.inflation-bar {
+  margin-top: 12px;
+  font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.06em; border-radius: 10px; padding: 8px 14px;
 }
-.view-tab {
-  border: 1px solid var(--line); background: var(--panel); color: var(--dim);
-  border-radius: 10px; padding: 8px 18px; cursor: pointer;
-  font-family: 'Space Mono', monospace; font-size: 12px;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  display: inline-flex; align-items: center; gap: 8px;
-}
-.view-tab.on {
-  color: var(--ink);
-  border-color: transparent;
-  background:
-    linear-gradient(var(--panel2), var(--panel2)) padding-box,
-    linear-gradient(90deg, var(--pink), var(--cyan)) border-box;
-  box-shadow: 0 0 14px rgba(43,228,255,0.15);
-}
-.view-tab:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
-.tab-count {
-  font-size: 10px; background: var(--pink); color: var(--void);
-  border-radius: 999px; padding: 1px 7px; font-weight: 700;
-}
-.inflation-pill {
-  margin-left: auto;
-  font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700;
-  letter-spacing: 0.08em; border-radius: 999px; padding: 5px 12px;
-}
-.inflation-pill.hot { color: var(--hot); border: 1px solid rgba(255,92,57,0.5); background: rgba(255,92,57,0.08); }
-.inflation-pill.cool { color: var(--lime); border: 1px solid rgba(198,255,74,0.5); background: rgba(198,255,74,0.08); }
+.inflation-bar.hot { color: var(--hot); border: 1px solid rgba(255,92,57,0.5); background: rgba(255,92,57,0.08); }
+.inflation-bar.cool { color: var(--lime); border: 1px solid rgba(198,255,74,0.5); background: rgba(198,255,74,0.08); }
 
-/* ---------- player board ---------- */
-.pboard { margin-top: 4px; }
-.pb-stats {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;
+/* ---------- split layout ---------- */
+.split-layout {
+  display: grid;
+  grid-template-columns: 1fr 370px;
+  gap: 20px;
+  margin-top: 8px;
+  align-items: start;
 }
-.pb-addbar {
-  display: flex; gap: 8px; align-items: center; margin-bottom: 14px;
-  max-width: 420px;
-}
-.pb-add-input {
-  border: 1px solid rgba(43,228,255,0.4) !important;
-  background: var(--panel) !important;
-  border-radius: 999px !important;
-  padding: 9px 16px !important;
-}
-.pb-add-btn {
-  border: 1px solid rgba(198,255,74,0.5); background: rgba(198,255,74,0.08);
-  color: var(--lime); border-radius: 999px; padding: 9px 18px; cursor: pointer;
-  font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: 0.1em;
-  flex-shrink: 0;
-}
-.pb-add-btn:hover { background: rgba(198,255,74,0.16); }
-.pb-add-btn:focus-visible { outline: 2px solid var(--lime); outline-offset: 1px; }
+.left-col { min-width: 0; }
 
-.pb-empty {
-  border: 1px dashed var(--line); border-radius: 14px;
-  padding: 32px 26px; color: var(--dim); max-width: 560px; line-height: 1.55;
-  font-size: 13.5px;
+/* ---------- player board (right panel) ---------- */
+.pboard {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
 }
-.pb-empty-title {
-  font-family: 'Unbounded', sans-serif; color: var(--ink);
-  font-size: 17px; margin: 0 0 8px;
+.pb-title-bar {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.pb-title {
+  font-family: 'Unbounded', sans-serif; font-size: 14px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; margin: 0;
+}
+.pb-my-count {
+  font-family: 'Space Mono', monospace; font-size: 10px;
+  color: var(--violet); border: 1px solid rgba(155,107,255,0.5);
+  border-radius: 999px; padding: 2px 8px; font-weight: 700;
 }
 
 .pb-controls {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 8px;
 }
 .pb-search {
-  flex: 0 1 200px;
+  flex: 1 1 80px; min-width: 60px;
   border: 1px solid var(--line) !important;
-  background: var(--panel) !important;
+  background: var(--panel2) !important;
   border-radius: 999px !important;
-  padding: 7px 14px !important;
+  padding: 5px 10px !important;
+  font-size: 12px !important;
 }
 .pb-filter {
   border: 1px solid var(--line); background: none; color: var(--dim);
   border-radius: 999px; font-family: 'Space Mono', monospace;
-  font-size: 10px; letter-spacing: 0.1em; padding: 6px 11px; cursor: pointer;
+  font-size: 9px; letter-spacing: 0.08em; padding: 4px 7px; cursor: pointer;
 }
 .pb-filter.on { color: var(--cyan); border-color: rgba(43,228,255,0.55); background: rgba(43,228,255,0.08); }
 .pb-filter:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+
 .pb-head, .pb-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 56px 66px 66px 82px 50px 40px;
-  gap: 10px; align-items: center;
-  padding: 7px 6px;
+  grid-template-columns: 26px 1fr 36px 38px 38px 32px;
+  gap: 3px; align-items: center;
+  padding: 4px 2px;
   border-bottom: 1px solid var(--line);
 }
 .pb-head {
-  font-family: 'Space Mono', monospace; font-size: 10px;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim);
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim);
+  position: sticky; top: 0; background: var(--panel); z-index: 2;
 }
-.pb-row.gone { opacity: 0.42; }
+.pb-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.pb-row {
+  cursor: grab;
+  transition: background 0.1s;
+}
+.pb-row:hover:not(.gone) { background: rgba(43,228,255,0.04); }
+.pb-row:active:not(.gone) { cursor: grabbing; }
+.pb-row.gone { opacity: 0.35; cursor: default; }
 .pb-row.gone .pb-name { text-decoration: line-through; }
-.pb-name { font-weight: 600; font-size: 14px; }
+.pb-name { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pb-c { display: flex; justify-content: flex-end; }
-.pb-c:nth-child(2), .pb-c:nth-child(6), .pb-c:nth-child(7) { justify-content: center; }
+.pb-c:nth-child(1), .pb-c:nth-child(3), .pb-c:nth-child(6) { justify-content: center; }
 .pos-unknown { color: var(--dim); border: 1px solid var(--line); }
-.pb-val {
-  font-family: 'Space Mono', monospace; font-weight: 700; color: var(--dim);
-  font-variant-numeric: tabular-nums;
+.pb-yahoo {
+  font-family: 'Space Mono', monospace; font-weight: 700; color: var(--violet);
+  font-variant-numeric: tabular-nums; font-size: 10px;
 }
-.pb-adj {
+.pb-league {
   font-family: 'Space Mono', monospace; font-weight: 700; color: var(--cyan);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums; font-size: 10px;
 }
-.pb-sold { max-width: 74px; }
-.pb-sold.over { color: var(--hot) !important; }
-.pb-sold.under { color: var(--lime) !important; }
 .pb-gone { margin: 0 auto; }
-.pb-remove {
-  border: none; background: none; color: var(--dim);
-  font-size: 11px; cursor: pointer; padding: 4px 6px;
+.pb-star-col { justify-content: center !important; }
+.pb-star {
+  border: none; background: none; cursor: pointer; padding: 1px 2px;
+  font-size: 13px; color: var(--dim); transition: color 0.15s;
 }
-.pb-remove:hover { color: var(--hot); }
-.pb-remove:focus-visible { outline: 2px solid var(--hot); outline-offset: 1px; }
-.pb-note { font-size: 12.5px; color: var(--dim); margin-top: 16px; max-width: 640px; line-height: 1.5; }
+.pb-star:hover { color: var(--violet); }
+.pb-star.on { color: var(--violet); text-shadow: 0 0 10px rgba(155,107,255,0.5); }
+.pb-star:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
+.pb-row.my-guy { background: linear-gradient(90deg, rgba(155,107,255,0.08), transparent 70%); }
 
-@media (max-width: 760px) {
-  .pb-stats { grid-template-columns: 1fr; }
-  .pb-head, .pb-row { grid-template-columns: minmax(90px, 1fr) 40px 48px 48px 64px 38px 32px; gap: 5px; }
-  .pb-addbar { max-width: none; }
+/* drop target highlight */
+.row.drop-target {
+  background: rgba(43,228,255,0.12) !important;
+  box-shadow: inset 0 0 0 2px rgba(43,228,255,0.5);
+  border-radius: 6px;
+}
+
+@media (max-width: 1100px) {
+  .split-layout {
+    grid-template-columns: 1fr;
+  }
+  .pboard {
+    position: static;
+    max-height: 500px;
+    order: -1;
+  }
 }
 
 /* ---------- scoreboard ---------- */
@@ -1188,10 +1267,10 @@ const css = `
 }
 
 /* ---------- roster board ---------- */
-.roster { margin-top: 30px; border-top: 1px solid var(--line); }
+.roster { border-top: 1px solid var(--line); }
 .roster-head, .row {
   display: grid;
-  grid-template-columns: 44px 92px 70px minmax(160px, 0.9fr) 70px minmax(280px, 1.9fr);
+  grid-template-columns: 44px 92px 70px 70px minmax(140px, 0.8fr) minmax(240px, 1.8fr);
   gap: 12px;
   align-items: center;
   padding: 9px 6px;
@@ -1264,6 +1343,8 @@ const css = `
   text-align: right;
 }
 .cash.paid { color: var(--pink); font-weight: 700; }
+.cash.paid.at-plan { color: var(--lime) !important; }
+.cash.paid.over-plan { color: var(--hot) !important; }
 .row.keeper .cash.paid { color: var(--violet); }
 .cash-static {
   font-family: 'Space Mono', monospace; font-weight: 700;
@@ -1399,16 +1480,16 @@ const css = `
   .row {
     grid-template-columns: 30px 1fr 1fr;
     grid-template-areas:
-      "kpr pos plan"
-      "kpr won paid"
+      "kpr pos budget"
+      "kpr paid squad"
       "chips chips chips";
     row-gap: 6px;
   }
   .row > :nth-child(1) { grid-area: kpr; }
   .row > :nth-child(2) { grid-area: pos; }
-  .row > :nth-child(3) { grid-area: plan; }
-  .row > :nth-child(4) { grid-area: won; }
-  .row > :nth-child(5) { grid-area: paid; }
+  .row > :nth-child(3) { grid-area: budget; }
+  .row > :nth-child(4) { grid-area: paid; }
+  .row > :nth-child(5) { grid-area: squad; }
   .row > :nth-child(6) { grid-area: chips; }
 }
 `;
