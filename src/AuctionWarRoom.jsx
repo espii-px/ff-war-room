@@ -461,7 +461,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
   const createConfig = (i) => {
     setStore((st) => {
       const filled = st.configs.filter(Boolean).length;
-      const name = `Config ${filled + 1}`;
+      const name = `Build ${filled + 1}`;
       const configs = st.configs.map((c, j) =>
         j === i ? { name, data: clone(st.configs[st.active].data) } : c
       );
@@ -599,7 +599,6 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
     }));
   };
 
-  const planDelta = nums.planTotal - state.budget;
   const activeCfg = store.configs[store.active];
 
   return (
@@ -620,7 +619,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
 
       {/* ---------- config bookmarks ---------- */}
       <nav className="cfg-bar" aria-label="Saved configurations">
-        <span className="cfg-label">Configs</span>
+        <span className="cfg-label">Builds</span>
         {store.configs.map((c, i) =>
           c ? (
             <span key={i} className={`cfg-tab ${i === store.active ? "active" : ""}`}>
@@ -708,12 +707,6 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
               </div>
             </div>
 
-            {planDelta !== 0 && (
-              <div className="plan-warning">
-                Plan totals ${nums.planTotal} against a ${state.budget} budget ({planDelta > 0 ? "+" : ""}{planDelta}). Adjust plan values below until it zeroes out.
-              </div>
-            )}
-
             {Math.abs(market.inflation - 1) >= 0.02 && (
               <div className={`inflation-bar ${market.inflation > 1 ? "hot" : "cool"}`}>
                 {market.inflation > 1 ? "▲" : "▼"} Market inflation {market.inflation > 1 ? "+" : ""}{Math.round((market.inflation - 1) * 100)}% — room paid ${market.paid} for ${market.worth} of value
@@ -783,7 +776,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
 
                 <span className="num-col">
                   <input
-                    className={`cash paid ${slot.spent !== null && slot.spent !== "" && slot.proj > 0 ? (Number(slot.spent) <= slot.proj ? "at-plan" : "over-plan") : ""}`}
+                    className={`cash paid ${slot.spent !== null && slot.spent !== "" && slot.proj > 0 ? (Number(slot.spent) < slot.proj ? "under-plan" : Number(slot.spent) > slot.proj ? "over-plan" : "") : ""}`}
                     type="number" min="0"
                     placeholder={slot.keeper ? "cost" : "$"}
                     value={slot.spent === null || slot.spent === "" ? "" : slot.spent}
@@ -871,8 +864,8 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
           <div className="row totals">
             <span className="kpr-col" />
             <span className="pos">Total</span>
-            <span className="num-col cash-static">${nums.planTotal}</span>
-            <span className="num-col cash-static">${nums.spent}</span>
+            <span className={`num-col cash-static ${nums.planTotal > state.budget ? "over-budget" : ""}`}>${nums.planTotal}</span>
+            <span className={`num-col cash-static ${nums.spent > state.budget ? "over-budget" : ""}`}>${nums.spent}</span>
             <span />
             <span className="totals-note">
               Budget ${" "}
@@ -1320,15 +1313,6 @@ const css = `
 .c-violet { color: var(--violet); text-shadow: 0 0 14px rgba(155,107,255,0.35); }
 .stat-sub { font-size: 11.5px; color: var(--dim); }
 
-.plan-warning {
-  margin-top: 12px;
-  border: 1px solid var(--hot);
-  background: rgba(255,92,57,0.10);
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 13.5px;
-}
-
 /* ---------- roster board ---------- */
 .roster { border-top: 1px solid var(--line); }
 .roster-head, .row {
@@ -1406,8 +1390,9 @@ const css = `
   text-align: right;
 }
 .cash.paid { color: var(--pink); font-weight: 700; }
-.cash.paid.at-plan { color: var(--lime) !important; }
+.cash.paid.under-plan { color: var(--lime) !important; }
 .cash.paid.over-plan { color: var(--hot) !important; }
+.cash-static.over-budget { color: var(--hot) !important; }
 .row.keeper .cash.paid { color: var(--violet); }
 .cash-static {
   font-family: 'Space Mono', monospace; font-weight: 700;
