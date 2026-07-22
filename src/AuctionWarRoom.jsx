@@ -128,34 +128,49 @@ const findPlayer = (name) => {
 };
 
 /* ---------------- 2025 league draft history ---------------- */
-/* Actual prices paid in this league last year — used to calculate league-adjusted values */
+/* Actual prices paid in this league last year.
+   Pick 150+ = keepers (kept at last year price + $5, bargain deals).
+   Keepers are excluded from the league multiplier since they don't reflect true market value. */
 const HIST = {
-  "Bijan Robinson": 73, "Ja'Marr Chase": 73, "CeeDee Lamb": 67, "Justin Jefferson": 66,
-  "Saquon Barkley": 65, "Christian McCaffrey": 59, "Derrick Henry": 59, "Jahmyr Gibbs": 52,
-  "Amon-Ra St. Brown": 52, "Drake London": 51, "Jonathan Taylor": 50, "Ashton Jeanty": 50,
-  "Chase Brown": 50, "Bucky Irving": 44, "Omarion Hampton": 41, "Nico Collins": 40,
-  "Josh Allen": 38, "Kenneth Walker III": 37, "Trey McBride": 37, "Josh Jacobs": 36,
-  "Jayden Daniels": 35, "A.J. Brown": 34, "Jalen Hurts": 30, "Tyreek Hill": 30,
-  "Tee Higgins": 29, "TreVeyon Henderson": 29, "Mike Evans": 29, "Lamar Jackson": 28,
-  "Malik Nabers": 28, "James Conner": 26, "James Cook": 26, "Emeka Egbuka": 25,
-  "Alvin Kamara": 25, "Joe Burrow": 24, "Breece Hall": 24, "Puka Nacua": 23,
-  "Tetairoa McMillan": 22, "Marvin Harrison Jr.": 22, "Davante Adams": 20, "Terry McLaurin": 20,
-  "Matthew Golden": 19, "DK Metcalf": 19, "David Montgomery": 18, "RJ Harvey": 18,
-  "George Kittle": 18, "D'Andre Swift": 17, "Aaron Jones": 16, "Garrett Wilson": 16,
-  "Tony Pollard": 16, "George Pickens": 16, "Isiah Pacheco": 16, "Ricky Pearsall": 15,
-  "Calvin Ridley": 15, "Jameson Williams": 14, "Jordan Mason": 13, "Xavier Worthy": 13,
-  "Zach Charbonnet": 13, "Jaylen Waddle": 12, "DJ Moore": 12, "Kaleb Johnson": 12,
-  "Courtland Sutton": 12, "Rashee Rice": 11, "Jaylen Warren": 11, "Brock Bowers": 11,
-  "Brian Thomas Jr.": 11, "Dak Prescott": 11, "Rome Odunze": 10, "Deebo Samuel": 10,
-  "Jordan Addison": 10, "Zay Flowers": 10, "Kyren Williams": 10, "Tank Bigsby": 10,
+  // Auction picks (true market prices)
+  "CeeDee Lamb": 67, "Justin Jefferson": 66, "Saquon Barkley": 65,
+  "Christian McCaffrey": 59, "Drake London": 51, "Jonathan Taylor": 50,
+  "Ashton Jeanty": 50, "Chase Brown": 50, "Bucky Irving": 44, "Omarion Hampton": 41,
+  "Josh Allen": 38, "Kenneth Walker III": 37, "Trey McBride": 37,
+  "A.J. Brown": 34, "Tyreek Hill": 30, "TreVeyon Henderson": 29, "Mike Evans": 29,
+  "James Conner": 26, "James Cook": 26, "Emeka Egbuka": 25, "Alvin Kamara": 25,
+  "Joe Burrow": 24, "Breece Hall": 24, "Tetairoa McMillan": 22,
+  "Marvin Harrison Jr.": 22, "Davante Adams": 20, "Terry McLaurin": 20,
+  "Matthew Golden": 19, "DK Metcalf": 19, "RJ Harvey": 18, "D'Andre Swift": 17,
+  "Aaron Jones": 16, "Tony Pollard": 16, "George Pickens": 16, "Isiah Pacheco": 16,
+  "Ricky Pearsall": 15, "Calvin Ridley": 15, "Jameson Williams": 14,
+  "Jordan Mason": 13, "Xavier Worthy": 13, "Zach Charbonnet": 13,
+  "Jaylen Waddle": 12, "DJ Moore": 12, "Kaleb Johnson": 12,
+  "Rashee Rice": 11, "Dak Prescott": 11, "Rome Odunze": 10, "Deebo Samuel": 10,
+  "Zay Flowers": 10, "Tank Bigsby": 10,
+  "Baker Mayfield": 9, "Justin Fields": 9, "Bo Nix": 9, "Stefon Diggs": 9,
+  "Travis Kelce": 8, "Travis Hunter": 8, "Brandon Aubrey": 8, "Cam Skattebo": 8,
+  "DeVonta Smith": 8, "Cooper Kupp": 7,
 };
 
-/* Calculate league multiplier per position from last year's prices vs Yahoo values */
+/* Keepers from 2025 (pick 150+) — prices are artificially low, excluded from multiplier calc */
+const KEEPERS_2025 = new Set([
+  "Bijan Robinson", "Ja'Marr Chase", "Derrick Henry", "Jahmyr Gibbs",
+  "Amon-Ra St. Brown", "Nico Collins", "Josh Jacobs", "Jayden Daniels",
+  "Jalen Hurts", "Tee Higgins", "Lamar Jackson", "Malik Nabers",
+  "Puka Nacua", "David Montgomery", "George Kittle", "Garrett Wilson",
+  "Courtland Sutton", "Brock Bowers", "Brian Thomas Jr.",
+  "Jordan Addison", "Kyren Williams", "Jaylen Warren",
+  "De'Von Achane", "Ladd McConkey", "Jaxon Smith-Njigba",
+  "Austin Ekeler", "Keenan Allen",
+]);
+
+/* Calculate league multiplier per position from auction-only prices (no keepers) */
 const POS_MULT = (() => {
   const byPos = {};
   for (const p of PLAYERS) {
     const hist = HIST[p.n];
-    if (hist && p.v > 0) {
+    if (hist && p.v > 0 && !KEEPERS_2025.has(p.n)) {
       if (!byPos[p.p]) byPos[p.p] = { paid: 0, val: 0 };
       byPos[p.p].paid += hist;
       byPos[p.p].val += p.v;
@@ -168,18 +183,22 @@ const POS_MULT = (() => {
   return mults;
 })();
 
-/* League-adjusted value: blends Yahoo value with this league's historical spending patterns */
+/* League-adjusted value: blends Yahoo value with this league's historical spending patterns.
+   Keepers are excluded — only true auction prices inform the estimate. */
 const leagueVal = (name, pos, yahooVal) => {
   if (!yahooVal || yahooVal <= 0) return null;
-  // If player was drafted last year, weight their historical price
   const hist = HIST[name];
   const mult = POS_MULT[pos] || 1;
-  if (hist) {
-    // 40% last year's price, 60% Yahoo adjusted by position multiplier
-    return Math.max(1, Math.round(hist * 0.4 + yahooVal * mult * 0.6));
+  const isKeeper = KEEPERS_2025.has(name);
+  const base = Math.round(yahooVal * mult);
+  if (hist && !isKeeper) {
+    // Blend 40% last year's auction price + 60% position-adjusted Yahoo,
+    // but never go below Yahoo — a low historical price means a bargain, not true value
+    const blended = Math.round(hist * 0.4 + base * 0.6);
+    return Math.max(yahooVal, blended);
   }
-  // New player: just apply position multiplier
-  return Math.max(1, Math.round(yahooVal * mult));
+  // Keeper or new player: position multiplier, floored at Yahoo value
+  return Math.max(yahooVal, base);
 };
 
 /* shorthand names from Ryan's sheet, valued for this league */
@@ -317,6 +336,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
   const [boardPos, setBoardPos] = useState("ALL");
   const [dragPlayer, setDragPlayer] = useState(null);
   const [dropSlotId, setDropSlotId] = useState(null);
+  const [mobileView, setMobileView] = useState("roster"); // "roster" | "board"
   const saveTimer = useRef(null);
   const prevMaxBid = useRef(null);
   const [bidPulse, setBidPulse] = useState(false);
@@ -376,7 +396,14 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
   const fullBoard = useMemo(() => {
     const merged = {};
     for (const p of PLAYERS) {
-      merged[p.n] = { pos: p.p, val: p.v, sold: null, gone: false, ...(board[p.n] || {}) };
+      const b = board[p.n];
+      merged[p.n] = {
+        pos: p.p, val: p.v, sold: null, gone: false,
+        ...(b || {}),
+        // never let a null/0 board val override the PLAYERS val
+        val: (b && b.val != null && b.val > 0) ? b.val : p.v,
+        pos: (b && b.pos && b.pos !== "?") ? b.pos : p.p,
+      };
     }
     // include any manually-added board entries not in PLAYERS
     for (const [name, e] of Object.entries(board)) {
@@ -631,11 +658,21 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
         <span className="cfg-hint">new = copy of current · click active name to rename</span>
       </nav>
 
+      {/* ---------- mobile view toggle ---------- */}
+      <div className="mobile-tabs">
+        <button className={`mobile-tab ${mobileView === "roster" ? "on" : ""}`} onClick={() => setMobileView("roster")}>
+          My Roster
+        </button>
+        <button className={`mobile-tab ${mobileView === "board" ? "on" : ""}`} onClick={() => setMobileView("board")}>
+          Player Board {myGuys.length > 0 ? `(${myGuys.length}★)` : ""}
+        </button>
+      </div>
+
       {/* ---------- two-column layout ---------- */}
       <div className="split-layout">
 
         {/* ---------- LEFT: scoreboard + roster ---------- */}
-        <div className="left-col">
+        <div className={`left-col ${mobileView === "board" ? "mobile-hide" : ""}`}>
           <header className="board">
             <div className="board-stats">
               <div className={`maxbid ${bidPulse ? "pulse" : ""} ${nums.maxBid <= 5 ? "danger" : ""}`}>
@@ -852,7 +889,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
         </div>
 
         {/* ---------- RIGHT: player board ---------- */}
-        <aside className="pboard">
+        <aside className={`pboard ${mobileView === "roster" ? "mobile-hide" : ""}`}>
           <div className="pb-title-bar">
             <h2 className="pb-title">Player Board</h2>
             {myGuys.length > 0 && <span className="pb-my-count">{myGuys.length}★</span>}
@@ -927,7 +964,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
                       <span className={`ac-pos pos-${posClass}`}>{e.pos}</span>
                     </span>
                     <span className="pb-c num-col pb-yahoo">{val > 0 ? `$${val}` : "—"}</span>
-                    <span className="pb-c num-col pb-league" title={HIST[name] ? `Went for $${HIST[name]} last year` : "Est. from league trends"}>{lv ? `$${lv}` : "—"}</span>
+                    <span className="pb-c num-col pb-league" title={KEEPERS_2025.has(name) ? `Keeper last year` : HIST[name] ? `Auctioned for $${HIST[name]} last year` : "Est. from league trends"}>{lv ? `$${lv}` : "—"}</span>
                     <span className="pb-c">
                       <button
                         className={`k-toggle pb-gone ${gone ? "on" : ""}`}
@@ -1177,15 +1214,41 @@ const css = `
   border-radius: 6px;
 }
 
+/* mobile tabs — hidden on desktop */
+.mobile-tabs { display: none; }
+
 @media (max-width: 1100px) {
   .split-layout {
     grid-template-columns: 1fr;
   }
   .pboard {
     position: static;
-    max-height: 500px;
-    order: -1;
+    max-height: none;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    padding: 10px 6px;
   }
+  .mobile-tabs {
+    display: flex; gap: 6px; margin-bottom: 12px;
+  }
+  .mobile-tab {
+    flex: 1;
+    border: 1px solid var(--line); background: var(--panel); color: var(--dim);
+    border-radius: 10px; padding: 10px 12px; cursor: pointer;
+    font-family: 'Space Mono', monospace; font-size: 12px;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    text-align: center;
+  }
+  .mobile-tab.on {
+    color: var(--ink);
+    border-color: transparent;
+    background:
+      linear-gradient(var(--panel2), var(--panel2)) padding-box,
+      linear-gradient(90deg, var(--pink), var(--cyan)) border-box;
+    box-shadow: 0 0 14px rgba(43,228,255,0.15);
+  }
+  .mobile-hide { display: none !important; }
 }
 
 /* ---------- scoreboard ---------- */
@@ -1473,23 +1536,68 @@ const css = `
 
 /* ---------- mobile ---------- */
 @media (max-width: 760px) {
-  .board-stats { grid-template-columns: 1fr 1fr; }
+  .wr-root { padding: 12px 8px 60px; }
+  .board-title h1 { font-size: 22px; margin-bottom: 14px; }
+  .board-stats { grid-template-columns: 1fr 1fr; gap: 6px; }
   .maxbid { grid-column: 1 / -1; }
+  .stat { padding: 10px 12px; }
+  .stat-num { font-size: 20px; }
+  .maxbid-num { font-size: 36px; }
   .cfg-hint { display: none; }
+  .cfg-bar { gap: 5px; margin-bottom: 14px; padding-bottom: 10px; }
+
   .roster-head { display: none; }
   .row {
-    grid-template-columns: 30px 1fr 1fr;
+    display: grid;
+    grid-template-columns: 26px auto 1fr 56px 56px;
+    grid-template-rows: auto auto;
     grid-template-areas:
-      "kpr pos budget"
-      "kpr paid squad"
-      "chips chips chips";
-    row-gap: 6px;
+      "kpr pos squad budget paid"
+      "chips chips chips chips chips";
+    gap: 4px 6px;
+    padding: 8px 4px;
+    align-items: center;
   }
   .row > :nth-child(1) { grid-area: kpr; }
   .row > :nth-child(2) { grid-area: pos; }
   .row > :nth-child(3) { grid-area: budget; }
   .row > :nth-child(4) { grid-area: paid; }
-  .row > :nth-child(5) { grid-area: squad; }
+  .row > :nth-child(5) { grid-area: squad; min-width: 0; }
   .row > :nth-child(6) { grid-area: chips; }
+
+  .pos { font-size: 11px; }
+  .cash { font-size: 12px; }
+  .cash.proj, .cash.paid { width: 100%; }
+  .player { font-size: 12px; }
+  .won-cell { min-width: 0; }
+  .chip { font-size: 11px; }
+  .chip-name { font-size: 11px; padding: 3px 2px 3px 8px; }
+  .chip-val { font-size: 10px; }
+  .chip-x { font-size: 9px; padding: 3px 6px 3px 2px; }
+  .chip-add { font-size: 11px; padding: 3px 8px; }
+
+  .row.totals {
+    grid-template-columns: 26px auto 1fr 56px 56px;
+    grid-template-areas: "kpr pos . budget paid";
+    grid-template-rows: auto;
+  }
+  .row.totals > :nth-child(5) { display: none; }
+  .row.totals > :nth-child(6) { display: none; }
+
+  .pb-head, .pb-row {
+    grid-template-columns: 22px 1fr 30px 32px 32px 26px;
+    gap: 2px;
+    padding: 3px 1px;
+  }
+  .pb-name { font-size: 11px; }
+  .pb-yahoo, .pb-league { font-size: 9px; }
+  .pb-filter { font-size: 8px; padding: 3px 5px; }
+  .pb-search { font-size: 11px !important; padding: 4px 8px !important; flex: 1 1 60px; }
+  .pb-star { font-size: 11px; }
+  .ac-pos { font-size: 7px; padding: 1px 3px; }
+
+  .wr-footer { gap: 6px; }
+  .ghost { font-size: 11px; padding: 6px 12px; }
+  .autosave { display: none; }
 }
 `;
