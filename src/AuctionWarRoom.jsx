@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 
 /* ------------------------------------------------------------------ */
-/*  FF 2026 — Auction Draft War Room  (v5)                             */
+/*  Auction Lab  (v5)                                                  */
 /*  · 5 bookmarkable configs for draft prep scenarios                  */
 /*  · Keeper checkboxes (max 2) with standout styling                  */
 /*  · ~170-player DB with autocomplete, values estimated for           */
@@ -337,6 +337,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
   const [dragPlayer, setDragPlayer] = useState(null);
   const [dropSlotId, setDropSlotId] = useState(null);
   const [mobileView, setMobileView] = useState("roster"); // "roster" | "board"
+  const [showLeague, setShowLeague] = useState(false);
   const saveTimer = useRef(null);
   const prevMaxBid = useRef(null);
   const [bidPulse, setBidPulse] = useState(false);
@@ -792,7 +793,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
                     value={slot.player}
                     ariaLabel={`Player at ${slot.pos}`}
                     onChange={(v) => updateSlot(slot.id, { player: v })}
-                    onPick={(p) => updateSlot(slot.id, { player: p.n })}
+                    onPick={(p) => updateSlot(slot.id, { player: p.n, spent: (slot.spent === null || slot.spent === "") ? p.v : slot.spent })}
                   />
                   {slot.keeper && <span className="k-badge">KEEPER</span>}
                 </span>
@@ -886,6 +887,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
           <div className="pb-title-bar">
             <h2 className="pb-title">Player Board</h2>
             {myGuys.length > 0 && <span className="pb-my-count">{myGuys.length}★</span>}
+            <button className={`pb-lgue-toggle ${showLeague ? "on" : ""}`} onClick={() => setShowLeague((v) => !v)} title={showLeague ? "Hide league values" : "Show league values"}>L</button>
           </div>
 
           <div className="pb-controls">
@@ -907,12 +909,12 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
             </button>
           </div>
 
-          <div className="pb-head">
+          <div className={`pb-head ${showLeague ? "" : "no-lgue"}`}>
             <span className="pb-c pb-star-col" title="My Guys">★</span>
             <span>Player</span>
             <span className="pb-c">Pos</span>
-            <span className="pb-c num-col">Yahoo</span>
-            <span className="pb-c num-col">Lgue</span>
+            <span className="pb-c num-col">Val</span>
+            {showLeague && <span className="pb-c num-col">Lgue</span>}
             <span className="pb-c">Gone</span>
           </div>
 
@@ -933,7 +935,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
                 return (
                   <div
                     key={name}
-                    className={`pb-row ${gone ? "gone" : ""} ${isMyGuy ? "my-guy" : ""}`}
+                    className={`pb-row ${gone ? "gone" : ""} ${isMyGuy ? "my-guy" : ""} ${showLeague ? "" : "no-lgue"}`}
                     draggable={!gone}
                     onDragStart={(ev) => {
                       setDragPlayer(name);
@@ -957,7 +959,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
                       <span className={`ac-pos pos-${posClass}`}>{e.pos}</span>
                     </span>
                     <span className="pb-c num-col pb-yahoo">{val > 0 ? `$${val}` : "—"}</span>
-                    <span className="pb-c num-col pb-league" title={KEEPERS_2025.has(name) ? `Keeper last year` : HIST[name] ? `Auctioned for $${HIST[name]} last year` : "Est. from league trends"}>{lv ? `$${lv}` : "—"}</span>
+                    {showLeague && <span className="pb-c num-col pb-league" title={KEEPERS_2025.has(name) ? `Keeper last year` : HIST[name] ? `Auctioned for $${HIST[name]} last year` : "Est. from league trends"}>{lv ? `$${lv}` : "—"}</span>}
                     <span className="pb-c">
                       <button
                         className={`k-toggle pb-gone ${gone ? "on" : ""}`}
@@ -1159,6 +1161,9 @@ const css = `
   padding: 4px 2px;
   border-bottom: 1px solid var(--line);
 }
+.pb-head.no-lgue, .pb-row.no-lgue {
+  grid-template-columns: 26px 1fr 36px 38px 32px;
+}
 .pb-head {
   font-family: 'Space Mono', monospace; font-size: 9px;
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim);
@@ -1198,6 +1203,15 @@ const css = `
 .pb-star:hover { color: var(--violet); }
 .pb-star.on { color: var(--violet); text-shadow: 0 0 10px rgba(155,107,255,0.5); }
 .pb-star:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
+.pb-lgue-toggle {
+  margin-left: auto;
+  border: 1px solid var(--line); background: none; color: var(--dim);
+  border-radius: 5px; font-family: 'Space Mono', monospace;
+  font-size: 9px; font-weight: 700; width: 20px; height: 20px;
+  cursor: pointer; padding: 0; opacity: 0.35; transition: opacity 0.15s;
+}
+.pb-lgue-toggle:hover { opacity: 0.7; }
+.pb-lgue-toggle.on { opacity: 1; color: var(--cyan); border-color: rgba(43,228,255,0.5); background: rgba(43,228,255,0.08); }
 .pb-row.my-guy { background: linear-gradient(90deg, rgba(155,107,255,0.08), transparent 70%); }
 
 /* drop target highlight */
@@ -1571,6 +1585,9 @@ const css = `
 
   .pb-head, .pb-row {
     grid-template-columns: 22px 1fr 30px 32px 32px 26px;
+  }
+  .pb-head.no-lgue, .pb-row.no-lgue {
+    grid-template-columns: 22px 1fr 30px 32px 26px;
     gap: 2px;
     padding: 3px 1px;
   }

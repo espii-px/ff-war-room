@@ -1,9 +1,9 @@
 {
-  "name": "ff-war-room",
+  "name": "auction-lab",
   "private": true,
   "version": "6.0.0",
   "type": "module",
-  "description": "FF 2026 Auction Draft War Room — a fantasy football auction draft companion",
+  "description": "Auction Lab -- a fantasy football auction draft companion",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

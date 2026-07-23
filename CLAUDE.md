@@ -1,4 +1,4 @@
-# FF 2026 — Auction Draft War Room
+# Auction Lab
 
 A single-page React app for running a fantasy football **auction** draft. Built for
 a specific league: **12-team, $200 budget, half PPR, 6pt passing TDs**, with **2 keepers**.
