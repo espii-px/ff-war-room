@@ -201,6 +201,95 @@ const leagueVal = (name, pos, yahooVal) => {
   return Math.max(yahooVal, base);
 };
 
+/* ---------------- fantasy point projections (0.5 PPR, 6pt pass TD) ---------------- */
+/* Vegas-implied PPG projections + weekly standard deviation for volatility modeling.
+   Used by Build Analysis to calculate starter value, bench depth, ceiling/floor. */
+const PROJ_RAW = [
+  // QBs — [name, ppg, std]
+  ["Josh Allen",24.5,6.0],["Lamar Jackson",24.0,6.5],["Jayden Daniels",23.0,6.5],
+  ["Jalen Hurts",22.5,6.0],["Joe Burrow",22.0,5.5],["Drake Maye",21.0,6.5],
+  ["Patrick Mahomes",20.5,5.0],["Dak Prescott",19.5,5.5],["Baker Mayfield",19.5,5.5],
+  ["Bo Nix",19.0,6.0],["Caleb Williams",18.5,6.5],["Jaxson Dart",18.0,7.0],
+  ["Justin Herbert",17.5,5.0],["Jared Goff",17.5,4.5],["Jordan Love",17.0,5.5],
+  ["Brock Purdy",16.5,4.5],["Trevor Lawrence",16.5,5.5],["Kyler Murray",16.0,6.0],
+  ["C.J. Stroud",16.0,5.0],["Justin Fields",15.5,6.5],["J.J. McCarthy",15.5,6.5],
+  ["Matthew Stafford",15.5,4.5],["Bryce Young",15.0,6.0],["Michael Penix Jr.",15.0,6.0],
+  ["Cam Ward",15.0,6.5],["Tua Tagovailoa",14.5,4.5],["Daniel Jones",14.0,5.0],
+  ["Tyler Shough",14.0,6.0],["Sam Darnold",14.0,5.5],["Geno Smith",14.0,4.5],
+  ["Shedeur Sanders",13.5,6.5],["Aaron Rodgers",13.5,5.0],["Anthony Richardson",13.0,7.5],
+  ["Russell Wilson",13.0,5.0],
+  // RBs
+  ["Bijan Robinson",19.5,6.0],["Jahmyr Gibbs",18.5,5.5],["Jonathan Taylor",16.5,5.5],
+  ["Omarion Hampton",16.0,6.0],["Chase Brown",16.0,5.5],["Ashton Jeanty",15.5,6.5],
+  ["De'Von Achane",15.5,7.0],["James Cook",15.0,5.5],["Kenneth Walker III",14.5,6.0],
+  ["Saquon Barkley",14.5,5.5],["Christian McCaffrey",14.0,5.5],["Josh Jacobs",14.0,5.0],
+  ["Bucky Irving",13.5,5.5],["Derrick Henry",13.5,5.0],["Jeremiyah Love",12.5,6.0],
+  ["Kyren Williams",12.0,5.5],["Javonte Williams",11.5,5.0],["TreVeyon Henderson",11.0,5.5],
+  ["Breece Hall",10.5,5.5],["Quinshon Judkins",10.0,5.0],["RJ Harvey",9.5,5.5],
+  ["Bhayshul Tuten",9.5,5.5],["D'Andre Swift",8.5,4.5],["Cam Skattebo",8.0,5.5],
+  ["Alvin Kamara",8.0,4.0],["Jaylen Warren",8.0,4.5],["James Conner",7.5,4.5],
+  ["Tony Pollard",7.5,4.5],["Kyle Monangai",7.5,5.0],["Rhamondre Stevenson",7.0,4.5],
+  ["Chuba Hubbard",7.0,4.0],["Trey Benson",7.0,5.0],["Jordan Mason",7.0,5.0],
+  ["Kaleb Johnson",7.0,5.0],["David Montgomery",6.5,4.0],["Jonathon Brooks",6.5,5.0],
+  ["Aaron Jones",6.5,4.0],["Isiah Pacheco",6.5,4.5],["Travis Etienne",6.5,4.5],
+  ["Woody Marks",6.5,4.5],["Jacory Croskey-Merritt",6.0,4.5],["Tyrone Tracy Jr.",6.0,4.0],
+  ["Rachaad White",5.5,4.0],["Brian Robinson Jr.",5.5,3.5],["Tank Bigsby",5.5,4.5],
+  ["Dylan Sampson",5.5,4.5],["Zach Charbonnet",5.0,4.0],["Braelon Allen",5.0,4.5],
+  ["Tyjae Spears",5.0,4.0],["Najee Harris",5.0,3.5],["Ollie Gordon II",5.0,4.5],
+  ["Isaac Guerendo",5.0,4.5],["Chris Rodriguez Jr.",4.5,4.0],["Nick Chubb",4.5,3.5],
+  ["Ray Davis",4.5,4.0],["Jaydon Blue",4.5,4.0],["Devin Neal",4.5,4.0],
+  ["Austin Ekeler",4.0,3.5],
+  // WRs
+  ["Ja'Marr Chase",18.5,5.5],["Justin Jefferson",17.5,5.0],["Puka Nacua",17.0,5.0],
+  ["Jaxon Smith-Njigba",16.5,5.0],["CeeDee Lamb",16.5,5.5],["Amon-Ra St. Brown",16.0,4.5],
+  ["Malik Nabers",15.5,5.5],["Drake London",14.0,4.5],["Nico Collins",13.5,5.0],
+  ["Chris Olave",13.5,5.0],["Brian Thomas Jr.",13.0,5.0],["A.J. Brown",13.0,5.5],
+  ["Rashee Rice",12.5,4.5],["Tee Higgins",12.0,5.0],["Garrett Wilson",12.0,4.5],
+  ["Emeka Egbuka",12.0,5.0],["George Pickens",11.5,5.5],["Marvin Harrison Jr.",11.5,5.5],
+  ["Tetairoa McMillan",11.5,5.5],["Luther Burden III",11.0,5.0],["Davante Adams",11.0,5.0],
+  ["Zay Flowers",11.0,4.5],["Travis Hunter",11.0,5.5],["Ladd McConkey",10.5,4.5],
+  ["Jaylen Waddle",10.5,5.0],["DJ Moore",10.5,4.5],["Mike Evans",10.0,5.0],
+  ["DK Metcalf",10.0,5.0],["Jameson Williams",10.0,5.5],["Xavier Worthy",10.0,5.5],
+  ["Terry McLaurin",9.5,4.5],["Courtland Sutton",9.5,4.5],["Jordan Addison",9.5,5.0],
+  ["Matthew Golden",9.5,5.5],["Rome Odunze",9.0,4.5],["Christian Watson",9.0,5.5],
+  ["Ricky Pearsall",9.0,4.5],["Tyreek Hill",8.5,5.0],["Chris Godwin",8.5,4.5],
+  ["Stefon Diggs",8.5,4.5],["Jerry Jeudy",8.5,4.0],["Jayden Higgins",8.5,5.0],
+  ["Michael Pittman Jr.",8.0,4.0],["Calvin Ridley",8.0,4.5],["Jakobi Meyers",8.0,4.0],
+  ["Keon Coleman",8.0,5.0],["Tre Harris",8.0,5.0],["Jauan Jennings",8.0,4.0],
+  ["Troy Franklin",8.0,5.0],["Khalil Shakir",7.5,3.5],["Josh Downs",7.5,4.0],
+  ["Brandon Aiyuk",7.5,4.5],["Quentin Johnston",7.0,4.5],["Deebo Samuel",7.0,4.5],
+  ["Cooper Kupp",7.0,4.5],["Kayshon Boutte",7.0,4.5],["Kyle Williams",7.0,4.5],
+  ["Rashid Shaheed",6.5,4.5],["Cedric Tillman",6.5,4.0],["Jack Bech",6.5,4.5],
+  ["Jalen McMillan",6.5,4.0],["Darnell Mooney",6.0,4.0],["Marquise Brown",6.0,4.5],
+  ["Pat Bryant",6.0,4.5],["Jaylin Noel",6.0,4.5],["Adam Thielen",5.5,3.5],
+  // TEs
+  ["Brock Bowers",14.0,4.5],["Trey McBride",13.0,4.0],["Colston Loveland",11.5,5.0],
+  ["George Kittle",10.5,4.5],["Tyler Warren",10.0,4.5],["Sam LaPorta",9.5,4.0],
+  ["Tucker Kraft",8.0,4.0],["T.J. Hockenson",7.5,3.5],["Kyle Pitts",7.5,4.5],
+  ["Harold Fannin Jr.",7.0,4.5],["Oronde Gadsden II",7.0,4.5],["David Njoku",6.5,3.5],
+  ["Mark Andrews",6.5,4.0],["Dalton Kincaid",6.5,3.5],["Jake Ferguson",6.5,3.5],
+  ["Mason Taylor",6.5,4.0],["Travis Kelce",6.0,3.5],["Isaiah Likely",6.0,4.0],
+  ["Evan Engram",6.0,3.5],["Elijah Arroyo",6.0,4.5],["Dallas Goedert",6.0,3.5],
+  ["Jonnu Smith",5.5,3.5],["Brenton Strange",5.5,3.5],["Theo Johnson",5.5,3.5],
+  ["Zach Ertz",5.5,3.0],["Cade Otton",5.0,3.0],
+  // Ks
+  ["Brandon Aubrey",8.5,3.0],["Cameron Dicker",8.0,3.0],["Jake Bates",8.0,3.0],
+  ["Chris Boswell",8.0,3.0],["Ka'imi Fairbairn",7.5,3.0],
+  // DEFs
+  ["Broncos D/ST",8.0,4.5],["Texans D/ST",7.5,4.5],["Steelers D/ST",7.5,4.5],
+  ["Eagles D/ST",7.5,4.5],["Ravens D/ST",7.0,4.5],["Seahawks D/ST",7.0,4.5],
+  ["Patriots D/ST",7.0,4.5],
+];
+const PROJ = {};
+for (const [n, ppg, std] of PROJ_RAW) PROJ[n] = { ppg, std };
+
+/* Waiver-wire replacement level PPG by position (12-team league baseline) */
+const REPL = { QB: 14.5, RB: 5.5, WR: 6.5, TE: 5.0, K: 7.0, DEF: 6.0, FLEX: 5.5 };
+
+/* Which slots are starters vs bench */
+const isStarterSlot = (pos) => !pos.startsWith("BN-") && pos !== "IR";
+const slotBasePos = (pos) => pos.replace(/[0-9]/g, "").replace("BN-", "").replace("FLX", "FLEX");
+
 /* shorthand names from Ryan's sheet, valued for this league */
 const MKT = {
   "Herbert": 10, "Caleb Williams": 15, "Dart": 12, "Shough": 3,
@@ -338,6 +427,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
   const [dropSlotId, setDropSlotId] = useState(null);
   const [mobileView, setMobileView] = useState("roster"); // "roster" | "board"
   const [showLeague, setShowLeague] = useState(false);
+  const [showProj, setShowProj] = useState(true);
   const saveTimer = useRef(null);
   const prevMaxBid = useRef(null);
   const [bidPulse, setBidPulse] = useState(false);
@@ -511,6 +601,75 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
     return { spent, planTotal, remaining, maxBid, openCount: open.length, filledCount, totalCount: required.length, openPlan, flexRoom, bank, keeperCount, keeperCost };
   }, [state]);
 
+  /* ---------- build analysis ---------- */
+  const analysis = useMemo(() => {
+    const starters = [];
+    const bench = [];
+    let hasAny = false;
+
+    for (const slot of state.slots) {
+      if (!slot.player) continue;
+      const proj = PROJ[slot.player];
+      if (!proj) continue;
+      hasAny = true;
+      const basePos = slotBasePos(slot.pos);
+      const replPos = basePos === "FLEX" ? "FLEX" : (findPlayer(slot.player)?.p || basePos);
+      const entry = { name: slot.player, pos: replPos, ppg: proj.ppg, std: proj.std, slot: slot.pos };
+      if (isStarterSlot(slot.pos)) starters.push(entry);
+      else bench.push(entry);
+    }
+
+    if (!hasAny) return null;
+
+    // Starter PPG
+    const starterPPG = starters.reduce((a, s) => a + s.ppg, 0);
+
+    // Weekly volatility: combined std = sqrt(sum of variances)
+    const combinedVar = starters.reduce((a, s) => a + s.std * s.std, 0);
+    const combinedStd = Math.sqrt(combinedVar);
+    const ceiling = starterPPG + 1.5 * combinedStd;
+    const floor = Math.max(0, starterPPG - 1.5 * combinedStd);
+
+    // Surplus value: each player's PPG over replacement
+    const surplusFor = (entry) => {
+      const repl = REPL[entry.pos] || REPL.FLEX;
+      return entry.ppg - repl;
+    };
+    const starterSurplus = starters.reduce((a, s) => a + surplusFor(s), 0);
+    const benchSurplus = bench.reduce((a, s) => a + surplusFor(s), 0);
+    const totalSurplus = starterSurplus + benchSurplus;
+
+    // Bench depth: average PPG drop per starter injury
+    // For each starter, find the best bench replacement at same position
+    const benchByPos = {};
+    for (const b of bench) {
+      const bp = b.pos;
+      if (!benchByPos[bp]) benchByPos[bp] = [];
+      benchByPos[bp].push(b);
+    }
+    let depthDrops = 0;
+    let depthCount = 0;
+    for (const s of starters) {
+      const pool = benchByPos[s.pos] || [];
+      const best = pool.length > 0 ? Math.max(...pool.map((b) => b.ppg)) : (REPL[s.pos] || REPL.FLEX);
+      depthDrops += s.ppg - best;
+      depthCount++;
+    }
+    const avgDropPerInjury = depthCount > 0 ? depthDrops / depthCount : 0;
+
+    return {
+      starterPPG, starterCount: starters.length,
+      benchPPG: bench.reduce((a, b) => a + b.ppg, 0), benchCount: bench.length,
+      ceiling: Math.round(ceiling * 10) / 10,
+      floor: Math.round(floor * 10) / 10,
+      starterSurplus: Math.round(starterSurplus * 10) / 10,
+      benchSurplus: Math.round(benchSurplus * 10) / 10,
+      totalSurplus: Math.round(totalSurplus * 10) / 10,
+      avgDropPerInjury: Math.round(avgDropPerInjury * 10) / 10,
+      starters, bench,
+    };
+  }, [state]);
+
   useEffect(() => {
     if (prevMaxBid.current !== null && prevMaxBid.current !== nums.maxBid) {
       setBidPulse(true);
@@ -616,7 +775,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
 
       {/* ---------- title ---------- */}
       <div className="board-title">
-        <span className="eyebrow">FF 2026 · The League · Auction · ½ PPR · 6pt Pass TD</span>
+        <span className="eyebrow">FF 2026 · The League · Auction · ½ PPR</span>
         <h1>Draft <span className="grad">Lab</span>{activeCfg && <span className="cfg-title"> / {activeCfg.name}</span>}</h1>
       </div>
 
@@ -716,6 +875,48 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
               </div>
             )}
           </header>
+
+          {analysis && (
+            <section className="build-analysis">
+              <h3 className="ba-title">Build Analysis <span className="ba-sub">0.5 PPR projections</span></h3>
+              <div className="ba-grid">
+                <div className="ba-card">
+                  <span className="ba-label">Starter PPG</span>
+                  <span className="ba-num c-cyan">{analysis.starterPPG.toFixed(1)}</span>
+                  <span className="ba-sub">{analysis.starterCount} of 9 starters projected</span>
+                </div>
+                <div className="ba-card">
+                  <span className="ba-label">Weekly ceiling</span>
+                  <span className="ba-num c-lime">{analysis.ceiling.toFixed(1)}</span>
+                  <span className="ba-sub">86th percentile week</span>
+                </div>
+                <div className="ba-card">
+                  <span className="ba-label">Weekly floor</span>
+                  <span className="ba-num c-hot">{analysis.floor.toFixed(1)}</span>
+                  <span className="ba-sub">14th percentile week</span>
+                </div>
+                <div className="ba-card">
+                  <span className="ba-label">Surplus value</span>
+                  <span className={`ba-num ${analysis.totalSurplus >= 0 ? "c-lime" : "c-hot"}`}>
+                    {analysis.totalSurplus >= 0 ? "+" : ""}{analysis.totalSurplus.toFixed(1)}
+                  </span>
+                  <span className="ba-sub">PPG over replacement roster</span>
+                </div>
+                <div className="ba-card">
+                  <span className="ba-label">Bench depth</span>
+                  <span className={`ba-num ${analysis.benchSurplus >= 0 ? "c-violet" : "c-hot"}`}>
+                    {analysis.benchSurplus >= 0 ? "+" : ""}{analysis.benchSurplus.toFixed(1)}
+                  </span>
+                  <span className="ba-sub">{analysis.benchCount} bench over waivers</span>
+                </div>
+                <div className="ba-card">
+                  <span className="ba-label">Injury cost</span>
+                  <span className="ba-num c-pink">-{analysis.avgDropPerInjury.toFixed(1)}</span>
+                  <span className="ba-sub">avg PPG drop per starter out</span>
+                </div>
+              </div>
+            </section>
+          )}
 
           <main className="roster">
           <div className="roster-head">
@@ -889,6 +1090,8 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
           <div className="pb-title-bar">
             <h2 className="pb-title">Player Board</h2>
             {myGuys.length > 0 && <span className="pb-my-count">{myGuys.length}★</span>}
+            <button className={`pb-lgue-toggle ${showProj ? "on" : ""}`} onClick={() => setShowProj((v) => !v)} title={showProj ? "Hide projections" : "Show PPG projections"}>P</button>
+            <span className="pb-title-spacer" />
             <button className={`pb-lgue-toggle ${showLeague ? "on" : ""}`} onClick={() => setShowLeague((v) => !v)} title={showLeague ? "Hide league values" : "Show league values"}>L</button>
           </div>
 
@@ -911,11 +1114,12 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
             </button>
           </div>
 
-          <div className={`pb-head ${showLeague ? "" : "no-lgue"}`}>
+          <div className={`pb-head ${showLeague ? "" : "no-lgue"} ${showProj ? "has-proj" : ""}`}>
             <span className="pb-c pb-star-col" title="My Guys">★</span>
             <span>Player</span>
             <span className="pb-c">Pos</span>
             <span className="pb-c num-col">Val</span>
+            {showProj && <span className="pb-c num-col">PPG</span>}
             {showLeague && <span className="pb-c num-col">Lgue</span>}
             <span className="pb-c">Gone</span>
           </div>
@@ -937,7 +1141,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
                 return (
                   <div
                     key={name}
-                    className={`pb-row ${gone ? "gone" : ""} ${isMyGuy ? "my-guy" : ""} ${showLeague ? "" : "no-lgue"}`}
+                    className={`pb-row ${gone ? "gone" : ""} ${isMyGuy ? "my-guy" : ""} ${showLeague ? "" : "no-lgue"} ${showProj ? "has-proj" : ""}`}
                     draggable={!gone}
                     onDragStart={(ev) => {
                       setDragPlayer(name);
@@ -961,6 +1165,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
                       <span className={`ac-pos pos-${posClass}`}>{e.pos}</span>
                     </span>
                     <span className="pb-c num-col pb-yahoo">{val > 0 ? `$${val}` : "—"}</span>
+                    {showProj && (() => { const pr = PROJ[name]; return <span className="pb-c num-col pb-ppg" title={pr ? `${(pr.ppg * 17).toFixed(0)} season pts · std ${pr.std}` : "No projection"}>{pr ? pr.ppg.toFixed(1) : "—"}</span>; })()}
                     {showLeague && <span className="pb-c num-col pb-league" title={KEEPERS_2025.has(name) ? `Keeper last year` : HIST[name] ? `Auctioned for $${HIST[name]} last year` : "Est. from league trends"}>{lv ? `$${lv}` : "—"}</span>}
                     <span className="pb-c">
                       <button
@@ -1102,6 +1307,60 @@ const css = `
 .inflation-bar.hot { color: var(--hot); border: 1px solid rgba(255,92,57,0.5); background: rgba(255,92,57,0.08); }
 .inflation-bar.cool { color: var(--lime); border: 1px solid rgba(198,255,74,0.5); background: rgba(198,255,74,0.08); }
 
+/* ---------- build analysis ---------- */
+.build-analysis {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.ba-title {
+  font-family: 'Unbounded', sans-serif; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 12px;
+  color: var(--ink);
+}
+.ba-title .ba-sub {
+  font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 400;
+  letter-spacing: 0.1em; color: var(--dim); margin-left: 8px;
+}
+.ba-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+.ba-card {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.ba-label {
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim);
+}
+.ba-num {
+  font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ba-card .ba-sub {
+  font-family: 'Space Grotesk', sans-serif; font-size: 10px;
+  color: var(--dim); line-height: 1.3;
+}
+.c-cyan { color: var(--cyan); }
+.c-lime { color: var(--lime); }
+.c-hot { color: var(--hot); }
+.c-violet { color: var(--violet); }
+.c-pink { color: var(--pink); }
+
+@media (max-width: 1100px) {
+  .ba-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 760px) {
+  .ba-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ---------- split layout ---------- */
 .split-layout {
   display: grid;
@@ -1163,8 +1422,14 @@ const css = `
   padding: 4px 2px;
   border-bottom: 1px solid var(--line);
 }
+.pb-head.has-proj, .pb-row.has-proj {
+  grid-template-columns: 26px 1fr 36px 38px 40px 38px 32px;
+}
 .pb-head.no-lgue, .pb-row.no-lgue {
   grid-template-columns: 26px 1fr 36px 38px 32px;
+}
+.pb-head.no-lgue.has-proj, .pb-row.no-lgue.has-proj {
+  grid-template-columns: 26px 1fr 36px 38px 40px 32px;
 }
 .pb-head {
   font-family: 'Space Mono', monospace; font-size: 9px;
@@ -1196,6 +1461,10 @@ const css = `
   font-family: 'Space Mono', monospace; font-weight: 700; color: var(--cyan);
   font-variant-numeric: tabular-nums; font-size: 10px;
 }
+.pb-ppg {
+  font-family: 'Space Mono', monospace; font-weight: 700; color: var(--lime);
+  font-variant-numeric: tabular-nums; font-size: 10px;
+}
 .pb-gone { margin: 0 auto; }
 .pb-star-col { justify-content: center !important; }
 .pb-star {
@@ -1205,8 +1474,8 @@ const css = `
 .pb-star:hover { color: var(--violet); }
 .pb-star.on { color: var(--violet); text-shadow: 0 0 10px rgba(155,107,255,0.5); }
 .pb-star:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
+.pb-title-spacer { flex: 1; }
 .pb-lgue-toggle {
-  margin-left: auto;
   border: 1px solid var(--line); background: none; color: var(--dim);
   border-radius: 5px; font-family: 'Space Mono', monospace;
   font-size: 9px; font-weight: 700; width: 20px; height: 20px;
@@ -1588,13 +1857,19 @@ const css = `
   .pb-head, .pb-row {
     grid-template-columns: 22px 1fr 30px 32px 32px 26px;
   }
+  .pb-head.has-proj, .pb-row.has-proj {
+    grid-template-columns: 22px 1fr 30px 32px 36px 32px 26px;
+  }
   .pb-head.no-lgue, .pb-row.no-lgue {
     grid-template-columns: 22px 1fr 30px 32px 26px;
     gap: 2px;
     padding: 3px 1px;
   }
+  .pb-head.no-lgue.has-proj, .pb-row.no-lgue.has-proj {
+    grid-template-columns: 22px 1fr 30px 32px 36px 26px;
+  }
   .pb-name { font-size: 11px; }
-  .pb-yahoo, .pb-league { font-size: 9px; }
+  .pb-yahoo, .pb-league, .pb-ppg { font-size: 9px; }
   .pb-filter { font-size: 8px; padding: 3px 5px; }
   .pb-search { font-size: 11px !important; padding: 4px 8px !important; flex: 1 1 60px; }
   .pb-star { font-size: 11px; }
