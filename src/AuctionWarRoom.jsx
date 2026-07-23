@@ -527,7 +527,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
 
   const assignTarget = (slot, name, val) => {
     const patch = { player: name };
-    if ((slot.spent === null || slot.spent === "") && val != null) patch.spent = val;
+    if (val != null) patch.spent = val;
     updateSlot(slot.id, patch);
   };
 
@@ -795,7 +795,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
                     value={slot.player}
                     ariaLabel={`Player at ${slot.pos}`}
                     onChange={(v) => updateSlot(slot.id, { player: v })}
-                    onPick={(p) => updateSlot(slot.id, { player: p.n, spent: (slot.spent === null || slot.spent === "") ? p.v : slot.spent })}
+                    onPick={(p) => updateSlot(slot.id, { player: p.n, spent: p.v })}
                   />
                   {slot.keeper && <span className="k-badge">KEEPER</span>}
                 </span>
