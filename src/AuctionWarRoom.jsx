@@ -525,8 +525,10 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
   const updateSlot = (id, patch) =>
     setData((d) => ({ ...d, slots: d.slots.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
 
-  const assignTarget = (slot, name) => {
-    if (slot.player !== name) updateSlot(slot.id, { player: name });
+  const assignTarget = (slot, name, val) => {
+    const patch = { player: name };
+    if ((slot.spent === null || slot.spent === "") && val != null) patch.spent = val;
+    updateSlot(slot.id, patch);
   };
 
   const patchTarget = (slot, idx, patch) =>
@@ -720,7 +722,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
             <span className="kpr-col">KPR</span>
             <span>Slot</span>
             <span className="num-col">Budget</span>
-            <span className="num-col">Paid</span>
+            <span className="num-col">Price</span>
             <span>Squad</span>
             <span>Targets</span>
           </div>
@@ -805,7 +807,7 @@ export default function AuctionWarRoom({ onLogout, userEmail }) {
                       <span key={i} className={`chip ${t.gone ? "gone" : ""} ${slot.player === t.name ? "won" : ""}`}>
                         <button
                           className="chip-name"
-                          onClick={() => (t.gone ? patchTarget(slot, i, { gone: false }) : assignTarget(slot, t.name))}
+                          onClick={() => (t.gone ? patchTarget(slot, i, { gone: false }) : assignTarget(slot, t.name, t.val))}
                           onDoubleClick={() => removeTarget(slot, i)}
                           title={t.gone ? "Marked gone — click to restore. Double-click to delete." : "Click to assign. Double-click to delete."}
                         >
